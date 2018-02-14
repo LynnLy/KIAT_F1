@@ -1,0 +1,125 @@
+---
+title: "Read Count Practice - Lynn"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(vcfR)
+library(tidyverse)
+library(reshape2)
+source("helpler.R")
+```
+
+
+```{r}
+setwd("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/mizukikadowaki/project/output")
+
+load("F1.young.reform.Rdata")
+
+# 1) filter based on missing data 
+F1.young.complete <- F1.young.reform[complete.cases(F1.young.reform),]
+dim(F1.young.complete) # 635218     24
+
+# 2) transform filter columns to numeric values 
+View(F1.young.complete)
+F1.young.complete[,c(2, 5:24)] <- lapply(F1.young.complete[,c(2, 5:24)], function(x) as.numeric(as.character(x))) 
+head(F1.young.complete)
+
+# 3) filter based on GQ  
+F1.young.GQ.filtered <- GQ.filter(vcf=F1.young.nomissing, n=30)
+dim(F1.young.GQ.filtered) # 288085     24  
+
+hist(as.numeric(as.character(F1.young.GQ.filtered$F1_415_GQ)))
+
+# 4) filter based depth 
+F1.young.DP.filtered <- DP.filter(vcf=F1.young.GQ.filtered, n=10)
+dim(F1.young.DP.filtered) # 166691     24
+
+# 5) filter based on gt (homozygous in parents)
+F1.young.GQ.filtered <- subset(F1.young.DP.filtered, (((Ae_GT=="-1" & Ol_GT=="1")) | ((Ae_GT=="1" & Ol_GT=="-1"))))
+dim(F1.young.GQ.filtered) # 49140    24
+
+# save(F1.young.GQ.filtered, file = "~/project/output/F1.young.GQ.filtered.Rdata")
+
+View(F1.young.GQ.filtered)
+```
+Visualizing genotype quality
+```{r}
+load("F1.young.GQ.filtered.Rdata")
+load("F1.flowering.GQ.filtered.Rdata")
+load("F1.early_silique.GQ.filtered.Rdata")
+load("F1.late_silique.GQ.filtered.Rdata")
+
+young_gq <- F1.young.GQ.filtered[,grep("_GQ", colnames(F1.young.GQ.filtered), value=T)]
+young_gq.melt <- melt(young_gq)
+young_gq.melt$tissue <- rep("young", nrow(young_gq.melt))
+
+flowering_gq <- F1.flowering.GQ.filtered[,grep("_GQ", colnames(F1.flowering.GQ.filtered), value=T)]
+flowering_gq.melt <- melt(flowering_gq)
+flowering_gq.melt$tissue <- rep("flowering", nrow(flowering_gq.melt))
+
+early_silique_gq <- F1.early_silique.GQ.filtered[,grep("_GQ", colnames(F1.early_silique.GQ.filtered), value=T)]
+early_silique_gq.melt <- melt(early_silique_gq)
+early_silique_gq.melt$tissue <- rep("early_silique", nrow(early_silique_gq.melt))
+
+late_silique_gq <- F1.late_silique.GQ.filtered[,grep("_GQ", colnames(F1.late_silique.GQ.filtered), value=T)]
+late_silique_gq.melt <- melt(late_silique_gq)
+late_silique_gq.melt$tissue <- rep("late_silique", nrow(late_silique_gq.melt))
+
+young_flowering_silique.GQ <- rbind(late_silique_gq.melt,flowering_gq.melt,young_gq.melt,  early_silique_gq.melt)
+
+gq <- ggplot(data = young_flowering_silique.GQ) 
+gq <- gq + geom_histogram(aes(value, fill=tissue), stat="bin", binwidth = 5) 
+gq <- gq + facet_wrap(~tissue, ncol = 2) 
+gq
+```
+
+Histogram for Genotype
+```{r}
+load("F1.young.GQ.filtered.Rdata") 
+load("F1.flowering.GQ.filtered.Rdata")
+young_gt <- F1.young.GQ.filtered[,grep("_GT", colnames(F1.young.GQ.filtered), value=T)]
+young_gt.melt <- melt(young_gt)
+young_gt.melt$tissue <- rep("young", nrow(young_gt.melt))
+dim(young_gt.melt) # 196560      3
+
+flowering_gt <- F1.flowering.GQ.filtered[,grep("_GT", colnames(F1.flowering.GQ.filtered), value=T)]
+flowering_gt.melt <- melt(flowering_gt)
+flowering_gt.melt$tissue <- rep("flowering", nrow(flowering_gt.melt))
+dim(flowering_gt.melt) # 177856      3 
+
+# 
+# early_silique_gt <- F1.early_silique.GQ.filtered[,grep("_GT", colnames(F1.early_silique.GQ.filtered), value=T)]
+# early_silique_gt.melt <- melt(early_silique_gt)
+# early_silique_gt.melt$tissue <- rep("early_silique", nrow(early_silique_gt.melt))
+# 
+# late_silique_gt <- F1.late_silique.GQ.filtered[,grep("_GT", colnames(F1.late_silique.GQ.filtered), value=T)]
+# late_silique_gt.melt <- melt(late_silique_gt)
+# late_silique_gt.melt$tissue <- rep("late_silique", nrow(late_silique_gt.melt))
+
+GT_tmp <- merge(young_gt.melt, flowering_gt.melt)
+
+young_flowering_silique <- rbind(flowering_gt.melt,young_gt.melt)
+young_flowering_silique$value <- (as.character(young_flowering_silique$value))
+
+
+p <- ggplot(data = young_flowering_silique) 
+p <- p + geom_histogram(aes(value, fill=tissue), stat="count") 
+p <- p + facet_wrap(~tissue, ncol = 2) 
+p 
+
+p.QUAL.Ol <- p +labs(list(x="log10(QUAL)", y="Number of SNPs"))  
+p.QUAL.Ol <- p.QUAL.Ol + theme(legend.position = "none") 
+p.QUAL.Ol    
+
+#ggplot(data =early_silique_gt.melt, aes(x=value))+
+#  geom_histogram(binwidth=0.1)
+
+```
+
+```{r}
+load("F1.young.GQ.filtered.Rdata")
+```
+
+
