@@ -1,0 +1,97 @@
+# R script for running the final analysis using a beta-binomial distribution.
+# For analysis with the binomial distribution, use Run_MBASED.R
+# Inputs: Pre-filtered, annotated, and phased data from MBASED_F1.rmd WITH dispersion parameter Rho
+# The input data should be saved in "phasedData.Rdata"
+
+rm(list = ls())
+
+library(MBASED)
+library(tidyverse)
+
+TwoSample <- function(annotatedData, mySNVs, genotype1, genotype2, numSim = 0){
+  RO1 <- paste(genotype1, "RO", sep = "_")
+  AO1 <- paste(genotype1, "AO", sep = "_")
+  RO2 <- paste(genotype2, "RO", sep = "_")
+  AO2 <- paste(genotype2, "AO", sep = "_")
+  RAB1 <- paste(genotype1, "refBias", sep = "_")
+  RAB2 <- paste(genotype2, "refBias", sep = "_")
+  DISP1 <- paste(genotype1, "disp", sep = "_")
+  DISP2 <- paste(genotype2, "disp", sep = "_")
+  
+  mySample <- SummarizedExperiment(
+    assays = list(lociAllele1Counts = matrix(c(annotatedData[, RO1], annotatedData[, RO2]), ncol = 2,
+                                             dimnames = list(names(mySNVs), c(genotype1, genotype2))),
+                  
+                  lociAllele2Counts = matrix(c(annotatedData[, AO1], annotatedData[, AO2]), ncol = 2,
+                                             dimnames = list(names(mySNVs), c(genotype1, genotype2))),
+                  
+                  lociAllele1CountsNoASEProbs = matrix(c(annotatedData[, RAB1], annotatedData[, RAB2]),
+                                                       ncol=2, dimnames=list(names(mySNVs), c(genotype1, genotype2))),
+                  lociCountsDispersions = matrix(c(annotatedData[, DISP1], annotatedData[, DISP2]), 
+                                                       ncol=2, dimnames=list(names(mySNVs), c(genotype1, genotype2)))
+                  ),
+                  
+    rowRanges=mySNVs)
+  
+  MBASEDOutput <- runMBASED(
+    ASESummarizedExperiment = mySample,
+    isPhased = TRUE,
+    numSim = numSim,
+    BPPARAM = SnowParam(workers = 2) # Default: No paralellization
+  )
+  
+  return(MBASEDOutput)
+} 
+
+runOnSubset <- function(annotatedData, index){
+  annotatedData.trimmed <- annotatedData[index, ]
+  
+  mySNVs.trimmed <- GRanges(
+    seqnames = annotatedData.trimmed$CHROM,
+    ranges = IRanges(start = annotatedData.trimmed$POS, width = 1),
+    aseID = as.vector(annotatedData.trimmed$GeneID),
+    allele1 = annotatedData.trimmed$REF,
+    allele2 = annotatedData.trimmed$ALT)
+  
+  return(TwoSample(annotatedData.trimmed, mySNVs.trimmed, "F1_414", "F1_415", numSim = 1000000))
+}
+
+load("phasedData.Rdata")
+phasedData <- phasedData[, -c(5:18)]
+
+FindIndexes <- function(data, start, size) {
+  # Required so that we don't separate SNVs that are from the same gene when subsetting our data
+  # Start = start index
+  # Size = Desired approximate interval length
+  i <- start + size
+  
+  if(i >= nrow(data)) {return(nrow(data))} # Reached the end of the dataset
+  
+  while(data$newGene[i] == FALSE) {i <- i + 1}
+  
+  return(i - 1)
+}
+
+startIndexes <- rep(1,42)
+endIndexes <- rep(1, 42)
+i = 1
+while(i < 43) {
+  endIndexes[i] <- FindIndexes(phasedData, start = startIndexes[i], size = 1000)
+  i <- i + 1
+  startIndexes[i] <- endIndexes[i-1] + 1
+}
+
+for (i in 30:42) {
+  old <- Sys.time()
+  start <- startIndexes[i]
+  end <- endIndexes[i]
+  
+  subsetName <- paste0("MBASED.F1.414.vs.F1.415.", start, "to", end)
+  print(paste0("Working on ", subsetName))
+  assign(subsetName, runOnSubset(phasedData, index = start:end))
+  save(list = c(subsetName), file = paste0(subsetName, ".Rdata"))
+  rm(list = c(subsetName))
+  
+  new <- Sys.time() - old 
+  print(paste0("Time elapsed: ", new))
+}
