@@ -1,0 +1,73 @@
+---
+title: "MBASED_F1_Results"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(MBASED)
+library(tidyverse)
+```
+
+```{r Analyzing Results Functions}
+SummarizeASEResults_2s <- function(MBASEDOutput) {
+  # Output: geneOutputDF is an easier way to look at MAF and p-values at the same time
+  geneOutputDF <- data.frame(
+    majorAlleleFrequencyDifference=assays(MBASEDOutput)$majorAlleleFrequencyDifference[,1],
+    pValueASE=assays(MBASEDOutput)$pValueASE[,1],
+    pValueHeterogeneity=assays(MBASEDOutput)$pValueHeterogeneity[,1]
+  )
+  
+  lociOutputGR <- rowRanges(metadata(MBASEDOutput)$locusSpecificResults)
+  lociOutputGR$allele1IsMajor <- assays(metadata(MBASEDOutput)$locusSpecificResults)$allele1IsMajor[,1]
+
+  lociOutputGR$MAFDifference <- assays(metadata(MBASEDOutput)$locusSpecificResults)$MAFDifference[,1]
+  lociOutputList <- split(lociOutputGR, factor(lociOutputGR$aseID, levels=unique(lociOutputGR$aseID)))
+  return(list(geneOutput=geneOutputDF, locusOutput=lociOutputList))
+}
+
+ExtractASE <- function(MBASEDOutput) {
+  # Extract only desired genes
+  # Modify ASEindexes to vary the strictness of selection.
+  
+  results <- SummarizeASEResults_2s(MBASEDOutput)
+
+  # Apply Benjamini-Hochberg (fdr) correction for multiple testing
+  adjustedP <- p.adjust(results$geneOutput$pValueASE, method = "BH", n = length(results$geneOutput$pValueASE))
+  
+  ASEindexes <- adjustedP < 0.05 & 
+    abs(results$geneOutput$majorAlleleFrequencyDifference) > 0.2
+  
+  significantResults <- list(results$geneOutput[ASEindexes, ], 
+                             results$locusOutput[ASEindexes, ])
+  return(significantResults)
+}
+```
+
+```{r Analysis and Summary}
+rm(list=ls())
+
+filenames <- list.files("MBASED_Results_Beta", pattern="*.Rdata", full.names=TRUE)
+
+for(i in 1:length(filenames)) {
+  load(filenames[i])
+}
+
+rm(i)
+rm(filenames)
+datanames <- ls()
+
+final <- do.call(rbind, mget(datanames))
+
+compiledMetadata <- metadata(final)[[1]]
+for(i in 2:length(metadata(final))) {
+  compiledMetadata <- rbind(compiledMetadata, metadata(final)[[i]])
+}
+
+metadata(final) <- list(locusSpecificResults= compiledMetadata)
+
+results <- SummarizeASEResults_2s(final)
+
+sig.F1.414 <- ExtractASE(final)
+dim(sig.F1.414[[1]]) #1946 SNVs found to be in ASE
+summary(sig.F1.414[[2]])
+```

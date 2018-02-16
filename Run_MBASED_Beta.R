@@ -37,7 +37,7 @@ TwoSample <- function(annotatedData, mySNVs, genotype1, genotype2, numSim = 0){
     ASESummarizedExperiment = mySample,
     isPhased = TRUE,
     numSim = numSim,
-    BPPARAM = SnowParam(workers = 2) # Default: No paralellization
+    BPPARAM = SnowParam(workers = 8) # Default: No paralellization
   )
   
   return(MBASEDOutput)
@@ -59,13 +59,21 @@ runOnSubset <- function(annotatedData, index){
 load("phasedData.Rdata")
 phasedData <- phasedData[, -c(5:18)]
 
-FindIndexes <- function(data, start, size) {
+SNVsPerGene <- phasedData %>% group_by(GeneID) %>% tally()
+
+# Gather all the genes with over 20 SNVs, as we don't have enough memory on Whitney to compute them.
+over20SNVs <- SNVsPerGene[SNVsPerGene$n > 20, ] # There are 33 of them. We can return to them later. 
+
+phasedData <- phasedData[!(phasedData$GeneID %in% over20SNVs$GeneID), ]
+
+
+FindIndexes <- function(data, start, size, end = nrow(data)) {
   # Required so that we don't separate SNVs that are from the same gene when subsetting our data
   # Start = start index
   # Size = Desired approximate interval length
   i <- start + size
   
-  if(i >= nrow(data)) {return(nrow(data))} # Reached the end of the dataset
+  if(i >= end) {return(end)} # Reached the end of the dataset
   
   while(data$newGene[i] == FALSE) {i <- i + 1}
   
@@ -75,19 +83,19 @@ FindIndexes <- function(data, start, size) {
 startIndexes <- rep(1,42)
 endIndexes <- rep(1, 42)
 i = 1
-while(i < 43) {
+while(i < 42) {
   endIndexes[i] <- FindIndexes(phasedData, start = startIndexes[i], size = 1000)
   i <- i + 1
   startIndexes[i] <- endIndexes[i-1] + 1
 }
 
-for (i in 30:42) {
+for (i in 1:41) {
   old <- Sys.time()
   start <- startIndexes[i]
   end <- endIndexes[i]
   
-  subsetName <- paste0("MBASED.F1.414.vs.F1.415.", start, "to", end)
-  print(paste0("Working on ", subsetName))
+  subsetName <- paste0("BETA.MBASED.F1.414.vs.F1.415.", start, "to", end)
+  print(paste0(i, "th Index. Working on ", subsetName))
   assign(subsetName, runOnSubset(phasedData, index = start:end))
   save(list = c(subsetName), file = paste0(subsetName, ".Rdata"))
   rm(list = c(subsetName))

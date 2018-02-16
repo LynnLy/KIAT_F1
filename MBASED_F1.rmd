@@ -4,12 +4,6 @@ author: Lynn Ly
 output: html_document
 ---
 
-Author comment  
-File description comment, including purpose of program, inputs, and outputs  
-source() and library() statements  
-Function definitions  
-Executed statements, if applicable (e.g., print, plot)  
-
 Purpose: This uses the MBASED package to analyze allele specific expression.  
   Single sample analysis: Find genes that display allelic imbalance ie. not expressed 0.5/0.5. Default threshold: 0.7   
   Two sample analysis: Find genes that display different ASE ratios between two samples with the SAME HAPLOTYPE. Doesn't matter what the actual ratios are, as long as they differ by over 0.2  
@@ -54,39 +48,6 @@ AnnotateSNPs <- function(SNPdata, gff.mRNA){
     left_join(as.data.frame(overlappedGenes), by=c("CHROM", "POS")) 
   
   return(annotatedSNPdata)  
-}
-```
-
-```{r Analyzing Results Functions}
-SummarizeASEResults_1s <- function(MBASEDOutput) {
-  # Output: geneOutputDF is an easier way to look at MAF and p-values at the same time
-  geneOutputDF <- data.frame(
-    majorAlleleFrequency = assays(MBASEDOutput)$majorAlleleFrequency[,1],
-    pValueASE = assays(MBASEDOutput)$pValueASE[,1],
-    pValueHeterogeneity = assays(MBASEDOutput)$pValueHeterogeneity[,1])
-  
-  lociOutputGR <- rowRanges(metadata(MBASEDOutput)$locusSpecificResults)
-  lociOutputGR$allele1IsMajor <- assays(metadata(MBASEDOutput)$locusSpecificResults)$allele1IsMajor[,1]
-  lociOutputGR$MAF <- assays(metadata(MBASEDOutput)$locusSpecificResults)$MAF[,1]
-  lociOutputList <- split(lociOutputGR, factor(lociOutputGR$aseID, levels = unique(lociOutputGR$aseID)))
-  return(list(geneOutput=geneOutputDF, locusOutput=lociOutputList))
-}
-
-ExtractASE <- function(MBASEDOutput) {
-  # Extract only desired genes
-  # Modify ASEindexes to vary the strictness of selection.
-  
-  results <- SummarizeASEResults_1s(MBASEDOutput)
-
-  # Apply Benjamini-Hochberg (fdr) correction for multiple testing
-  adjustedP <- p.adjust(results$geneOutput$pValueASE, method = "BH", n = length(results$geneOutput$pValueASE))
-  
-  ASEindexes <- adjustedP < 0.05 & 
-    results$geneOutput$majorAlleleFrequency > 0.7
-  
-  significantResults <- list(results$geneOutput[ASEindexes, ], 
-                             results$locusOutput[ASEindexes, ])
-  return(significantResults)
 }
 ```
 
@@ -340,6 +301,20 @@ phasedData.unordered <- rbind(inputVCF.Ae, inputVCF.Ol)
 attach(phasedData.unordered)
 phasedData <- phasedData.unordered[order(CHROM, POS), ]
 detach(phasedData.unordered)
+
+newGene <- rep(NA, nrow(phasedData))
+for(i in 38000:nrow(phasedData)) {
+  if(phasedData[i, "GeneID"] != phasedData[i-1, "GeneID"]) {
+    newGene[i] <- TRUE 
+  } else {
+    newGene[i] <- FALSE
+  }
+  if(i %% 100 == 0) {
+    print(i)
+  }
+}
+
+phasedData$newGene <- newGene
 
 save(phasedData, file = "phasedData.Rdata")
 ```
