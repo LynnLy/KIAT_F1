@@ -37,13 +37,13 @@ ExtractASE <- function(MBASEDOutput) {
   ASEindexes <- adjustedP < 0.05 & 
     abs(results$geneOutput$majorAlleleFrequencyDifference) > 0.2
   
-  significantResults <- list(results$geneOutput[ASEindexes, ], 
-                             results$locusOutput[ASEindexes, ])
+  significantResults <- list(geneOutput = results$geneOutput[ASEindexes, ], 
+                             locusOutput = results$locusOutput[ASEindexes, ])
   return(significantResults)
 }
 ```
 
-```{r Analysis and Summary}
+```{r Combine all the files into one, eval = FALSE}
 rm(list=ls())
 
 filenames <- list.files("MBASED_Results_Beta", pattern="*.Rdata", full.names=TRUE)
@@ -65,9 +65,21 @@ for(i in 2:length(metadata(final))) {
 
 metadata(final) <- list(locusSpecificResults= compiledMetadata)
 
+# save(final, file = "MBASED_Results_Beta/final.Rdata")
+```
+
+
+```{r Analysis and summary}
+load("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/lynnly/repos/KIAT_F1/MBASED_Results_Beta")
+
 results <- SummarizeASEResults_2s(final)
 
-sig.F1.414 <- ExtractASE(final)
-dim(sig.F1.414[[1]]) #1946 SNVs found to be in ASE
-summary(sig.F1.414[[2]])
+# class(results$geneOutput) # data.frame containing: GeneID, MAF Difference, p-value, and p-value for heterogenous slicing
+# class(results$locusOutput) # GRangesList containing all SNVs, organized by gene
+
+significant <- ExtractASE(final)
+dim(significant$geneOutput) #88 genes found to have F1.414 specific ASE
+summary(significant)
+
+rownames(significant$geneOutput) # Names of the genes with F1.414 specific ASE
 ```
