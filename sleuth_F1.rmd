@@ -20,21 +20,15 @@ kal_dirs
 
 The next step is to load an auxillary table that describes the experimental design and the relationship between the kallisto directories and the samples:
 
-```{r}
-s2c <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
-s2c <- dplyr::select(s2c, sample = Sample.ID, cultivar)
-s2c <- s2c[1:6, ] # young tissue only
-s2c
-```
-
-Now the directories must be appended in a new column to the table describing the experiment.
+Also, Now the directories must be appended in a new column to the table describing the experiment.
 This column must be labeled `path`, otherwise sleuth will report an error.
 This is to ensure that samples can be associated with kallisto quantifications.
 
 ```{r}
-s2c <- dplyr::mutate(s2c, path = kal_dirs)
-
-print(s2c)
+metadata <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
+metadata <- metadata[1:6, ]# young tissue only
+metadata <- dplyr::mutate(metadata, path = kal_dirs)
+metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path, rep)
 ```
 
 Next, the "sleuth object" can be constructed. This object will store not only the information about the experiment, but also details of the model to be used for differential testing, and the results.
@@ -43,7 +37,7 @@ It is prepared and used with four commands that (1) load the kallisto processed 
 The sleuth object must first be initialized with
 
 ```{r cache=TRUE}
-so <- sleuth_prep(s2c, extra_bootstrap_summary = TRUE)
+so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
 ```
 
 Then the full model is fit with
@@ -63,11 +57,21 @@ so <- sleuth_fit(so, ~1, 'reduced')
 ```
 
 and the test is performed with
+```{r}
+so <- sleuth_fit(so, ~rep, 'reducedRep')
+so <- sleuth_fit(so, ~rep + cultivar, 'fullRep')
+so <- sleuth_lrt(so, 'reducedRep', 'fullRep')
+``` 
+
 
 ```{r}
 so <- sleuth_lrt(so, 'reduced', 'full')
 
+
 save(so, file = "SleuthOutput.Rdata")
+save(metadata, file = "metadata.Rdata")
+#load("SleuthOutput.Rdata")
+#load("metadata.Rdata")
 ```
 
 In general, sleuth can utilize the likelihood ratio test with any pair of models that are nested, and other walkthroughs illustrate the power of such a framework for accounting for batch effects and more complex experimental designs.
@@ -92,44 +96,6 @@ The table shown above displays the top 20 significant genes with a (Benjamini-Ho
 plot_bootstrap(so, "BnaC09g40660D", units = "est_counts", color_by = "cultivar")
 ```
 
-### Including gene names into transcript-level analysis
-
-At this point the sleuth object constructed from the kallisto runs has information about the data, the experimental design, the __kallisto__ estimates, the model fit, and the testing.
-In other words it contains the entire analysis of the data.
-There is, however, one piece of information that can be useful to add in, but that is optional.
-In reading the kallisto output __sleuth__ has no information about the _genes_ transcripts are associated with, but this can be added allowing for searching and analysis of significantly differential transcripts by their associated gene names.
-
-Since the example was constructed with the ENSEMBL human transcriptome, we will add gene names from ENSEMBL using biomaRt (there are other ways to do this as well):
-
-First, install biomaRt with
-
-```{r eval=FALSE}
-source("http://bioconductor.org/biocLite.R")
-biocLite("biomaRt")
-```
-
-Then collect gene names with
-
-```{r cache=TRUE}
-mart <- biomaRt::useMart(biomart = "ENSEMBL_MART_ENSEMBL",
-  dataset = "hsapiens_gene_ensembl",
-  host = 'ensembl.org')
-t2g <- biomaRt::getBM(attributes = c("ensembl_transcript_id", "ensembl_gene_id",
-    "external_gene_name"), mart = mart)
-t2g <- dplyr::rename(t2g, target_id = ensembl_transcript_id,
-  ens_gene = ensembl_gene_id, ext_gene = external_gene_name)
-```
-
-and add them into the __sleuth__ table with
-
-```{r cache=TRUE}
-so <- sleuth_prep(s2c, target_mapping = t2g)
-so <- sleuth_fit(so, ~condition, 'full')
-so <- sleuth_fit(so, ~1, 'reduced')
-so <- sleuth_lrt(so, 'reduced', 'full')
-```
-
-This addition of metadata to transcript IDs is very general, and can be used to add in other information.
 
 The easiest way to view and interact with the results is to generate the sleuth live site that allows for exploratory data analysis:
 
@@ -139,7 +105,7 @@ sleuth_live(so)
 
 Among the tables and visualizations that can be explored with sleuth live are a number of plots that provide an overview of the experiment. For example, a PCA plot provides a visualization of the samples:
 ```{r}
-plot_pca(so, color_by = 'condition')
+plot_pca(so, color_by = 'cultivar')
 ```
 
 Various quality control metrics can also be examined. The count distributions for each sample (grouped by condition) can be displayed using the `plot_group_density` command:
@@ -149,5 +115,5 @@ plot_group_density(so, use_filtered = TRUE, units = "est_counts",
   trans = "log", grouping = setdiff(colnames(so$sample_to_covariates),
   "sample"), offset = 1)
 ```
-This walkthrough concludes short of providing a full tutorial on how to QC and analyze an experiment. For help and to get questions answered see [the kallisto-sleuth user group](https://groups.google.com/forum/#!forum/kallisto-sleuth-users).
+
 
