@@ -1,7 +1,7 @@
-# R script for running the final analysis using a beta-binomial distribution.
-# For analysis with the binomial distribution, use Run_MBASED.R
-# Inputs: Pre-filtered, annotated, and phased data from MBASED_F1.rmd WITH dispersion parameter Rho
-# The input data should be saved in "phasedData.Rdata"
+# R script for running the final analysis using a binomial distribution.
+# For analysis with the beta-binomial distribution, use Run_MBASED_Beta.R
+# Inputs: Pre-filtered, annotated, and phased data from MBASED_F1.rmd.
+# The input data should be saved in "annotatedData.Rdata"
 
 rm(list = ls())
 
@@ -15,8 +15,6 @@ TwoSample <- function(annotatedData, mySNVs, genotype1, genotype2, numSim = 0){
   AO2 <- paste(genotype2, "AO", sep = "_")
   RAB1 <- paste(genotype1, "refBias", sep = "_")
   RAB2 <- paste(genotype2, "refBias", sep = "_")
-  DISP1 <- paste(genotype1, "disp", sep = "_")
-  DISP2 <- paste(genotype2, "disp", sep = "_")
   
   mySample <- SummarizedExperiment(
     assays = list(lociAllele1Counts = matrix(c(annotatedData[, RO1], annotatedData[, RO2]), ncol = 2,
@@ -26,11 +24,7 @@ TwoSample <- function(annotatedData, mySNVs, genotype1, genotype2, numSim = 0){
                                              dimnames = list(names(mySNVs), c(genotype1, genotype2))),
                   
                   lociAllele1CountsNoASEProbs = matrix(c(annotatedData[, RAB1], annotatedData[, RAB2]),
-                                                       ncol=2, dimnames=list(names(mySNVs), c(genotype1, genotype2))),
-                  lociCountsDispersions = matrix(c(annotatedData[, DISP1], annotatedData[, DISP2]), 
-                                                       ncol=2, dimnames=list(names(mySNVs), c(genotype1, genotype2)))
-                  ),
-                  
+                                                       ncol=2, dimnames=list(names(mySNVs), c(genotype1, genotype2)))),
     rowRanges=mySNVs)
   
   MBASEDOutput <- runMBASED(
@@ -70,24 +64,24 @@ runOnSubsetReverse <- function(annotatedData, index){
   return(TwoSample(annotatedData.trimmed, mySNVs.trimmed, "F1_415", "F1_414", numSim = 1000000))
 }
 
-load("phasedData.Rdata")
-phasedData <- phasedData[, -c(5:18)]
+load("annotatedData.Rdata")
 
-SNVsPerGene <- phasedData %>% group_by(GeneID) %>% tally()
+annotatedData <- annotatedData[, -c(5:18)]
+
+SNVsPerGene <- annotatedData %>% group_by(GeneID) %>% tally()
 
 # Gather all the genes with over 20 SNVs, as we don't have enough memory on Whitney to compute them.
 over20SNVs <- SNVsPerGene[SNVsPerGene$n > 20, ] # There are 33 of them. We can return to them later. 
 
-phasedData <- phasedData[!(phasedData$GeneID %in% over20SNVs$GeneID), ]
+annotatedData <- annotatedData[!(annotatedData$GeneID %in% over20SNVs$GeneID), ]
 
-
-FindIndexes <- function(data, start, size, end = nrow(data)) {
+FindIndexes <- function(data, start, size) {
   # Required so that we don't separate SNVs that are from the same gene when subsetting our data
   # Start = start index
   # Size = Desired approximate interval length
   i <- start + size
   
-  if(i >= end) {return(end)} # Reached the end of the dataset
+  if(i >= nrow(data)) {return(nrow(data))} # Reached the end of the dataset
   
   while(data$newGene[i] == FALSE) {i <- i + 1}
   
@@ -97,8 +91,8 @@ FindIndexes <- function(data, start, size, end = nrow(data)) {
 startIndexes <- rep(1,42)
 endIndexes <- rep(1, 42)
 i = 1
-while(i < 42) {
-  endIndexes[i] <- FindIndexes(phasedData, start = startIndexes[i], size = 1000)
+while(i < 43) {
+  endIndexes[i] <- FindIndexes(annotatedData, start = startIndexes[i], size = 1000)
   i <- i + 1
   startIndexes[i] <- endIndexes[i-1] + 1
 }
@@ -108,11 +102,11 @@ for (i in 1:41) {
   start <- startIndexes[i]
   end <- endIndexes[i]
   
-  #subsetName <- paste0("BETA.MBASED.F1.414.vs.F1.415.", start, "to", end)
-  subsetName <- paste0("BETA.MBASED.F1.415.vs.F1.414.", start, "to", end)
+  #subsetName <- paste0("BINOM.MBASED.F1.414.vs.F1.415.", start, "to", end)
+  subsetName <- paste0("BINOM.MBASED.F1.415.vs.F1.414.", start, "to", end)
   print(paste0(i, "th Index. Working on ", subsetName))
-  #assign(subsetName, runOnSubset(phasedData, index = start:end))
-  assign(subsetName, runOnSubsetReverse(phasedData, index = start:end))
+  #assign(subsetName, runOnSubset(annotatedData, index = start:end))
+  assign(subsetName, runOnSubsetReverse(annotatedData, index = start:end))
   save(list = c(subsetName), file = paste0(subsetName, ".Rdata"))
   rm(list = c(subsetName))
   
