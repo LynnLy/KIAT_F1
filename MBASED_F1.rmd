@@ -6,15 +6,18 @@ output: html_document
 
 Purpose: This uses the MBASED package to analyze allele specific expression.  
   Single sample analysis: Find genes that display allelic imbalance ie. not expressed 0.5/0.5. Default threshold: 0.7   
-  Two sample analysis: Find genes that display different ASE ratios between two samples with the SAME HAPLOTYPE. Doesn't matter what the actual ratios are, as long as they differ by over 0.2  
+  Two sample analysis: Find genes that display different ASE ratios between two samples with the SAME HAPLOTYPE. Doesn't matter what the actual ratios are, as long as they differ by over 0.2. **IMPORTANT:** Two sample analysis is one-tailed. If it finds a large MAF difference, but it's negative, then the p-value will be high. This means results are NOT symmetrical, so pay attention to the order of the conditions that you're comparing.  
 Inputs: Pre-filtered VCF file, simplified gff file with just ranges and feature name  
-Outputs: major allele frequencies, frequency differences, list of genes displaying ASE  
+Outputs of this file: Phased data with gene annotations and estimates of reference bias and dispersion  
+End MBASED Outputs: major allele frequencies, frequency differences, list of genes displaying ASE  
 
 ```{r setup, include=FALSE}
 library(MBASED)
 library(tidyverse)
 library(VGAM)
 ```
+
+AnnotateSNPs Function
 
 ```{r AnnotateSNPs Function}
 # Modified from Ruijuan's function in helpler.R
@@ -50,6 +53,8 @@ AnnotateSNPs <- function(SNPdata, gff.mRNA){
   return(annotatedSNPdata)  
 }
 ```
+
+Functions for setting up the ASESummarizedExperiment input to `runMBASED()`
 
 ```{r Single and Two Sample Function}
 # Please change numSim to at least 1,000,000 for final analysis
@@ -108,6 +113,8 @@ TwoSample <- function(annotatedData, mySNVs, genotype1, genotype2, numSim = 0){
 } 
 ```
 
+Filtering Functions: `CoverageFilter()` requires at least 10 reads for a SNV, and that at least 10% of all reads support each allele. **We may want to return to reads discarded by this**, especially ones that were discarded from the second clause. These may include genes where one allele is completely silenced.  
+`RangeFilter()` discards SNVs that are within 10bp of another called SNV, in order to ensure read independence.  
 ```{r Filtering Functions}
 
 CoverageFilter <- function(vcf) {
@@ -158,9 +165,12 @@ RangeFilter <- function(vcf) {
 }
 ```
 
-From Paper: We assumed that fref,SNV (0.5) is constant across all SNVs within a sample (global reference bias), and we estimated this value as  
+`CalcReferenceBias()` is based on this quote from the paper: "We assumed that fref,SNV (0.5) is constant across all SNVs within a sample (global reference bias), and we estimated this value as  
 `Nref/Ntotal`  
-which is the ratio of all reference reads to total reads in the sample, after excluding the loci with the top 5% of read counts (trimmed for robustness)
+which is the ratio of all reference reads to total reads in the sample, after excluding the loci with the top 5% of read counts (trimmed for robustness)"
+
+`CalcDispersion()` finds the most likely rho (dispersion) for our data using maximum likelihood estimation.  
+The purpose of this is to estimate the parameters we need to use when MBASED samples from a beta-binomial distribution.
 
 ```{r Estimate Overdispersion and Reference Allele Bias}
 # If our data presents any, we should include these metrics when creating mySNVs. 
@@ -183,7 +193,6 @@ CalcReferenceBias <- function(vcf, genotype) {
   return(globalReferenceBias)
 }
 
-# TODO: Have someone double check my math
 CalcDispersion <- function(vcf, genotype, refBias) {
   RO <- paste(genotype, "RO", sep = "_")
   DP <- paste(genotype, "DP", sep = "_")
@@ -218,7 +227,7 @@ CalcDispersion <- function(vcf, genotype, refBias) {
   
   # Remove all SNVs with a BH-adjusted P < 0.05; these are outliers. There should not be too many, less than 1% of our total data.
   # NOTE: Since we are looking at so many SNVs, it seems that no multiple testing method will give P < 0.9
-  # I am testing just removing the top 63 + 71 SNVs (0.1% of the data), since they are clearly in ASE and inflating the dispersion
+  # I am testing just removing the top (~0.1% of the data), since they are clearly in ASE and inflating the dispersion
   vcf$adjustedP <- p.adjust(vcf$p, method = "none")
   vcf$adjustedP2 <- p.adjust(vcf$p2, method = "none")
   
@@ -242,6 +251,9 @@ CalcDispersion <- function(vcf, genotype, refBias) {
   }
 
 ```
+
+
+### Annotating and Filtering Data
 
 ```{r Annotating and Filtering Data}
 gff.mRNA <- read.table("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/ruijuanli/Reference/B.napus/gff.mRNA")
@@ -269,6 +281,8 @@ dim(annotatedData)
 
 # NOT AVAILABLE FOR B NAPUS. Discard all SNVs in highly repetitive genomic regions, which we defined as regions with sequence identity of > 95% to another genomic region based on selfChain Link track from UCSC genome browser.
 ```
+
+### Calculating reference bias and dispersion, and then phasing the data 
 
 ```{r Phasing Data}
 inputVCF <- annotatedData
@@ -319,67 +333,4 @@ phasedData$newGene <- newGene
 save(phasedData, file = "phasedData.Rdata")
 ```
 
-```{r Single Sample Analysis}
-mySNVs <- GRanges(
-  seqnames = annotatedData$CHROM,
-  ranges = IRanges(start = annotatedData$POS, width = 1),
-  aseID = as.vector(annotatedData$GeneID),
-  allele1 = annotatedData$REF,
-  allele2 = annotatedData$ALT)
-  
-names(mySNVs) <- annotatedData$GeneID
-
-MBASED.F1.414 <- SingleSample(annotatedData, mySNVs, genotype = "F1_414", numSim = 0, refBias = refBias414)
-save(MBASED.F1.414, file = "MBASED.F1.414.Rdata")
-MBASED.F1.415 <- SingleSample(annotatedData, mySNVs, genotype = "F1_415", numSim = 0, refBias = refBias415)
-save(MBASED.F1.414, file = "MBASED.F1.415.Rdata")
-```
-
-```{r Two Sample Analysis}
-# Estimating two sample run time using smaller datasets
-annotatedData.trimmed <- annotatedData[1:10000, ]
-
-mySNVs.trimmed <- GRanges(
-  seqnames = annotatedData.trimmed$CHROM,
-  ranges = IRanges(start = annotatedData.trimmed$POS, width = 1),
-  aseID = as.vector(annotatedData.trimmed$GeneID),
-  allele1 = annotatedData.trimmed$REF,
-  allele2 = annotatedData.trimmed$ALT)
-
-time100.10 <- system.time(MBASED.F1.414.vs.F1.415 <- TwoSample(annotatedData.trimmed, mySNVs.trimmed, "F1_414", "F1_415", numSim = 10))
-
-n = 1
-while(n <= 10) {
-  timeTaken <- rbind(timeTaken, c(system.time(TwoSample(annotatedData.trimmed, mySNVs.trimmed, "F1_414", "F1_415", numSim = n)), 10000, n))
-  n = n * 10
-  print(paste("Next: N =", n))
-}
-
-t <- as.data.frame(timeTaken)
-
-p <- ggplot(data = t[t$SNVs == 100, ], aes(y = sys.self, x= log(numSims))) +
-  geom_point(aes(color = "100")) +
-  geom_point(data = t[t$SNVs == 1000, ], aes(color = "1000")) + 
-  geom_point(data = t[t$SNVs ==5000, ], aes(color ="5000")) #+ 
-#  geom_point(data = t[t$SNVs == 10000, ], aes(color = "10000")) 
-
-p2 <- ggplot(data = t[t$SNVs == 100, ], aes(y = elapsed, x= log(numSims))) +
-  geom_point(aes(color = "100")) +
-  geom_point(data = t[t$SNVs == 1000, ], aes(color = "1000")) + 
-  geom_point(data = t[t$SNVs ==5000, ], aes(color ="5000")) + 
-  geom_point(data = t[t$SNVs == 10000, ], aes(color = "10000")) 
-
-```
-
-```{r Analysis and Summary}
-load("MBASED.F1.414.Rdata")
-load("MBASED.F1.415.Rdata")
-
-sig.F1.414 <- ExtractASE(MBASED.F1.414)
-dim(sig.F1.414[[1]]) #1946 SNVs found to be in ASE
-summary(sig.F1.414[[2]])
-
-sig.F1.415 <- ExtractASE(MBASED.F1.415)
-dim(sig.F1.415[[1]]) #2164 SNVs found to be in ASE
-head(sig.F1.415[[2]]$GeneID)
-```
+The data is now prepared to be used in **Run_MBASED.R** and **Run_MBASED_Beta.R**

@@ -9,9 +9,12 @@ editor_options:
 
 ```{r setup, include=FALSE}
 library(sleuth)
+
+# set the number of available cores to 4
+options(mc.cores = 4L)
 ```
 
-## Preliminaries
+# Preliminaries
 
 ```{r}
 sample_id <- dir(file.path("results"))
@@ -20,7 +23,7 @@ kal_dirs <- file.path("results", sample_id, "kallisto")
 kal_dirs
 ```
 
-Get the metadata from our experiment summary table and add a new column, path, leading to the kallisto directories. 
+Get the metadata from our experiment summary table and add a new column, path, leading to the kallisto directories.  
 ```{r}
 metadata <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
 metadata <- metadata[1:6, ]# young tissue only
@@ -28,10 +31,21 @@ metadata <- dplyr::mutate(metadata, path = kal_dirs)
 metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path, rep)
 ```
 
+This next chunk is not for sleuth, but to identify which genes we did not filter out when using edgeR, so we can compare them later. Although I only looked at young tissue in this analysis, the filtering parameter was on samples from all tissue types.
 
-Include gene-names into transcript-level analysis
+We kept genes with at least 10 reads in at least 3 of the 24 samples. 
+```{r}
+reads <- read.table("read.count.tsv", header = T, check.names = F)
 
-**Not necessary, as we included the gene names when we created the kallisto index. However, we cannot do transcript-level analysis, only gene leve**
+# filter based on read count 
+filteredReads <- reads[rowSums(reads[,-1] > 10) >= 3,]
+dim(filteredReads) #60176 genes remain
+```
+
+
+
+Include gene-names into transcript-level analysis  
+**Not necessary, as we included the gene names when we created the kallisto index. However, we cannot do transcript-level analysis, only gene level**
 ```{r}
 # bnapus <- biomaRt::useMart(biomart = "plants_mart", dataset = "bnapus_eg_gene", host = "plants.ensembl.org")
 # listAttributes(bnapus)
@@ -40,21 +54,15 @@ Include gene-names into transcript-level analysis
 ```
 
 
-Initialize sleuth object
-
 ```{r cache=TRUE}
+# Initialize sleuth object
 so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
-```
 
-Full model 
-
-```{r cache=TRUE}
+# Full model 
 so <- sleuth_fit(so, ~cultivar, 'full')
 so <- sleuth_fit(so, ~rep + cultivar, 'fullRep')
-```
-Reduced model
 
-```{r cache=TRUE}
+# Reduced model
 so <- sleuth_fit(so, ~1, 'reduced')
 so <- sleuth_fit(so, ~rep, 'reducedRep')
 ```
@@ -70,6 +78,8 @@ sleuth_save(so, file = "results/sleuthOutput.Rdata")
 sleuth_load("results/SleuthOutput.Rdata")
 #load("metadata.Rdata")
 ```
+
+# Analysis
 
 In general, sleuth can utilize the likelihood ratio test with any pair of models that are nested
 The results of the test can be examined with
@@ -92,6 +102,7 @@ The table shown above displays the top 20 significant genes with a (Benjamini-Ho
 
 ```{r}
 plot_bootstrap(so, "BnaC03g34410D", units = "est_counts", color_by = "cultivar")
+plot_bootstrap(so, "BnaA02g22240D", units = "est_counts", color_by = "cultivar")
 ```
 
 
