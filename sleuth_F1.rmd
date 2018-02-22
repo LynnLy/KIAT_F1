@@ -3,6 +3,8 @@ title: "Sleuth Differential Expression Analysis"
 author: "Lynn Ly"
 date: "February 16, 2018"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include=FALSE}
@@ -63,9 +65,9 @@ Compare the two models
 so <- sleuth_lrt(so, 'reduced', 'full')
 so <- sleuth_lrt(so, 'reducedRep', 'fullRep')
 
-#save(so, file = "SleuthOutput.Rdata")
+sleuth_save(so, file = "results/sleuthOutput.Rdata")
 #save(metadata, file = "metadata.Rdata")
-load("SleuthOutput.Rdata")
+sleuth_load("results/SleuthOutput.Rdata")
 #load("metadata.Rdata")
 ```
 
@@ -101,8 +103,33 @@ sleuth_live(so)
 
 Among the tables and visualizations that can be explored with sleuth live are a number of plots that provide an overview of the experiment. For example, a PCA plot provides a visualization of the samples:
 ```{r}
-plot_pca(so, color_by = 'cultivar')
+plot_pca(so, color_by = 'cultivar', units = "est_counts")
+plot_pca(so, color_by = 'cultivar', units = "tpm")
 ```
+
+```{r}
+plot_loadings(so, pc_input = 1, units = "tpm")
+
+# BnaC09g16500D has a huge effect
+plot_bootstrap(so, "BnaC09g16500D", units = "est_counts", color_by = "cultivar")
+```
+
+## Removing Outlier BnaC09g16500D
+
+```{r}
+metadata <- dplyr::filter(metadata, sample != "BnaC09g16500D")
+so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
+
+so <- sleuth_fit(so, ~cultivar, 'full')
+so <- sleuth_fit(so, ~rep + cultivar, 'fullRep')
+
+so <- sleuth_fit(so, ~1, 'reduced')
+so <- sleuth_fit(so, ~rep, 'reducedRep')
+```
+```
+
+
+
 
 Various quality control metrics can also be examined. The count distributions for each sample (grouped by condition) can be displayed using the `plot_group_density` command:
 
