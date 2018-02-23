@@ -1,17 +1,16 @@
 # Helper function to subset a kallisto
 
 # Taken from https://github.com/pachterlab/sleuth/pull/150/files
+# Some lines were modified because they were defunct
 
 filter_bootstraps <- function(bs, target_ids) { 
   # I made this function because the bootstrap filter in below was not working
-  filteredBootstraps <- bs[[1]][which(bs[[1]]$target_id %in% target_ids), ]
-  for(i in 2:length(bs)) {
-    filteredBootstraps <- rbind(filteredBootstraps, bs[[i]][which(bs[[i]]$target_id %in% target_ids), ])
+  filteredBootstraps <- vector(mode = "list", length = length(bs))
+  for(i in 1:length(bs)) {
+    filteredBootstraps[[i]] <- bs[[i]][which(bs[[i]]$target_id %in% target_ids), ]
   }
   return(filteredBootstraps)
 }
-
-testboot <- filter_bootstraps(testKal$bootstrap, geneIDs)
 
 subset_kallisto_custom <- function(obj, target_ids) {
   stopifnot(is(target_ids, "character"))
@@ -24,7 +23,6 @@ subset_kallisto_custom <- function(obj, target_ids) {
   # bs[which(bs$target_id %in% target_ids), ]
   #})
   new_obj$bootstrap <- filter_bootstraps(new_obj$bootstrap, target_ids)
-  
   
   attr(new_obj, "num_targets") <- subset_num
   excluded_ids <- obj$abundance$target_id[which(!(obj$abundance$target_id %in% target_ids))]
