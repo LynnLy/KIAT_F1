@@ -5,9 +5,13 @@ output: html_document
 ---
 
 Purpose: This uses the MBASED package to analyze allele specific expression.  
-  Single sample analysis: Find genes that display allelic imbalance ie. not expressed 0.5/0.5. Default threshold: 0.7   
+
+  Single sample analysis: Find genes that display allelic imbalance ie. not expressed 0.5/0.5. Default threshold: 0.7 
+  
   Two sample analysis: Find genes that display different ASE ratios between two samples with the SAME HAPLOTYPE. Doesn't matter what the actual ratios are, as long as they differ by over 0.2. **IMPORTANT:** Two sample analysis is one-tailed. If it finds a large MAF difference, but it's negative, then the p-value will be high. This means results are NOT symmetrical, so pay attention to the order of the conditions that you're comparing.  
+  
 Inputs: Pre-filtered VCF file, simplified gff file with just ranges and feature name  
+
 Outputs of this file: Phased data with gene annotations and estimates of reference bias and dispersion  
 End MBASED Outputs: major allele frequencies, frequency differences, list of genes displaying ASE  
 

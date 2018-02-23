@@ -8,6 +8,7 @@ library(MBASED)
 library(tidyverse)
 ```
 
+Helper Functions for summarizing results and getting significant ones
 ```{r Analyzing Results Functions}
 SummarizeASEResults_2s <- function(MBASEDOutput) {
   # Output: geneOutputDF is an easier way to look at MAF and p-values at the same time
@@ -43,10 +44,15 @@ ExtractASE <- function(MBASEDOutput) {
 }
 ```
 
-```{r Combine all the files into one, eval = FALSE}
+Combine all the MBASED results into one file, since we subsetted the data earlier to run it in parallel.  
+This chunk does not need to be run again.  
+```{r Combine all the files into one, include = FALSE}
 rm(list=ls())
 
-filenames <- list.files("MBASED_Results_Beta", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("MBASED_Results_Beta/414vs415", pattern="*.Rdata", full.names=TRUE)
+filenames <- list.files("MBASED_Results_Beta/415vs414", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("MBASED_Results_Binom/414vs415", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("MBASED_Results_Binom/415vs414", pattern="*.Rdata", full.names=TRUE)
 
 for(i in 1:length(filenames)) {
   load(filenames[i])
@@ -65,21 +71,66 @@ for(i in 2:length(metadata(final))) {
 
 metadata(final) <- list(locusSpecificResults= compiledMetadata)
 
-# save(final, file = "MBASED_Results_Beta/final.Rdata")
+# final414vs415b <- final
+final415vs414b <- final
+# final414vs415 <- final
+# final415vs414 <- final
+
+# save(final414vs415b, file = "MBASED_Results_Beta/final414vs415b.Rdata")
+save(final415vs414b, file = "MBASED_Results_Beta/final415vs414b.Rdata")
+# save(final414vs415, file = "MBASED_Results_Binom/final414vs415.Rdata")
+# save(final415vs414, file = "MBASED_Results_Binom/final415vs414.Rdata")
 ```
 
+## Analysis
 
+Loading my results
 ```{r Analysis and summary}
-load("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/lynnly/repos/KIAT_F1/MBASED_Results_Beta")
-
-results <- SummarizeASEResults_2s(final)
+load("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/lynnly/repos/KIAT_F1/MBASED_Results_Beta/final414vs415b.Rdata")
+load("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/lynnly/repos/KIAT_F1/MBASED_Results_Beta/final415vs414b.Rdata") 
+load("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/lynnly/repos/KIAT_F1/MBASED_Results_Binom/final414vs415.Rdata") 
+load("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/lynnly/repos/KIAT_F1/MBASED_Results_Binom/final415vs414.Rdata") 
 
 # class(results$geneOutput) # data.frame containing: GeneID, MAF Difference, p-value, and p-value for heterogenous slicing
 # class(results$locusOutput) # GRangesList containing all SNVs, organized by gene
 
-significant <- ExtractASE(final)
-dim(significant$geneOutput) #88 genes found to have F1.414 specific ASE
-summary(significant)
+significant <- ExtractASE(final414vs415)
+significantRev <- ExtractASE(final415vs414)
+significantb <- ExtractASE(final414vs415b)
+significantRevb <- ExtractASE(final415vs414b)
 
-rownames(significant$geneOutput) # Names of the genes with F1.414 specific ASE
+dim(significant$geneOutput) # 607 genes found in ASE using F1 414 as sample 1 and a binomial model
+dim(significantRev$geneOutput) # 603 genes
+dim(significantb$geneOutput) #88 genes found in ASE using F1 414 as sample 1
+dim(significantRevb$geneOutput) #94 genes found in ASE using F1 415 as sample 2
+
+genes <- rownames(significant$geneOutput) # Names of the genes 
+genesRev <- rownames(significantRev$geneOutput) 
+genesb <- rownames(significantb$geneOutput)
+genesRevb <- rownames(significantRevb$geneOutput)
+
+matches <- intersect(genesb, genesRevb) # 86 genes in agreement
+differences414 <- setdiff(genesb, genesRevb) # 2 genes unique when 414 is the first sample
+differences415 <- setdiff(genesRevb, genesb) # 8 genes unique when 415 is the first sample
+
+total <- union(genes, genesRev) # All the genes 
+totalb <- union(genesb, genesRevb) # All the genes 
+matchesBetweenBetaAndBinomial <- intersect(total, totalb)
+
+save(totalb, file = "totalb.Rdata")
 ```
+
+
+Loading Ruijuan's results using a different method, which used binomial model only
+```{r}
+load("ASE_gene.Rdata")
+length(ASE_gene) # 2530 genes found in ASE by Ruijuan
+
+matchesWithRuijuan <- intersect(ASE_gene, total)
+length(matchesWithRuijuan) # 554 out of 666 genes agreed using binomial model
+
+matchesWithRuijuanb <- intersect(ASE_gene, totalb)
+length(matchesWithRuijuanb) # 70 out of 96 genes using beta-binomial model
+
+```
+
