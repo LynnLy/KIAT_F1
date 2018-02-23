@@ -16,6 +16,7 @@ library(sleuth)
 
 # Preliminaries
 
+The kallisto results were generated using **kallisto_F1.sh**.
 ```{r}
 sample_id <- dir(file.path("results"))
 

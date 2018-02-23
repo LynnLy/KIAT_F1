@@ -6,6 +6,7 @@ output: html_document
 ---
 
 # Comparisons between Lynn's ASE and DE results, and comparisons between Lynn's and Ruijuan's results
+Also, comparisons between ASE results and cis / trans-eqtl results from the F2 population
 
 ## Lynn's ASE and DE Results
 
@@ -15,63 +16,115 @@ library(sleuth)
 library(MBASED)
 ```
 
+### Comparison to allele specific expression results in MBASED
+This is flawed because we ran sleuth on ALL genes, not just genes containing a SNV. But we can compare this to Ruijuan's preliminary numbers
 ```{r}
-so <- sleuth_load("sleuthResultsSubset.Rdata")
-
+so <- sleuth_load("sleuthResults.Rdata")
 sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
 sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
-
-dim(sleuth_significant) # Genes that are significantly differentially expressed
-
-load("totalb.Rdata")
 DEgenes <- sleuth_significant$target_id
+nonDEgenes <- anti_join(sleuth_table, sleuth_significant, by = "target_id")$target_id
 
-diffASEandDE <- intersect(totalb, DEgenes)
-diffASEnoDE <- setdiff(totalb, DEgenes)
-sameASEandDE <- setdiff(DEgenes, totalb)
+load("aseGenesBeta.Rdata")
 
-fisher.test()
+diffASEyesDE <- intersect(aseGenesBeta, DEgenes)
+sameASEyesDE <- setdiff(DEgenes, aseGenesBeta)
+diffASEnoDE <- setdiff(aseGenesBeta, DEgenes)
+sameASEnoDE <- setdiff(nonDEgenes, aseGenesBeta)
+
+cat(length(diffASEyesDE), "\t", length(sameASEyesDE), "\n", length(diffASEnoDE), "\t" ,length(sameASEnoDE))
+
+ASE_DE_SNP <- data.frame(DE = c(10, 2360), 
+                         no_DE = c(86, 48070))
+
+rownames(ASE_DE_SNP) = c("ASE", "no_ASE")
+
+fisher.test(ASE_DE_SNP)
 ```
 
 
-Comparison to allele specific expression results in MBASED
+### Comparison to ASE results when ONLY considering genes that contain a SNV.  
+sleuth was run after filtering for genes with SNVs.  
+no enrichment in my data
 ```{r}
-load("totalb.Rdata")
+so <- sleuth_load("sleuthResultsSubset.Rdata")
+sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
+sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
 DEgenes <- sleuth_significant$target_id
+nonDEgenes <- anti_join(sleuth_table, sleuth_significant, by = "target_id")$target_id
 
-diffASEandDE <- intersect(totalb, DEgenes)
-diffASEnoDE <- setdiff(totalb, DEgenes)
-sameASEandDE <- setdiff(DEgenes, totalb)
+load("aseGenesBeta.Rdata")
 
-fisher.test()
+diffASEyesDE <- intersect(aseGenesBeta, DEgenes)
+sameASEyesDE <- setdiff(DEgenes, aseGenesBeta)
+diffASEnoDE <- setdiff(aseGenesBeta, DEgenes)
+sameASEnoDE <- setdiff(nonDEgenes, aseGenesBeta)
+
+cat(length(diffASEyesDE), "\t", length(sameASEyesDE), "\n", length(diffASEnoDE), "\t" ,length(sameASEnoDE))
+
+ASE_DE_SNP <- data.frame(DE = c(10, 912), 
+                         no_DE = c(86, 10385))
+
+rownames(ASE_DE_SNP) = c("ASE", "no_ASE")
+
+fisher.test(ASE_DE_SNP) 
 ```
 
 ## Differential Expression Lynn's vs Ruijuan's
 
 Comparison to Ruijuan's DE genes from edgeR
 ```{r}
-load("DEgene.gt.F1.Rdata")
+so <- sleuth_load("sleuthResults.Rdata")
+sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
+sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
+
+load("DEgene.gt.F1.Rdata") # Ruijuan's results
 DEgene.young.F1$target_id <- rownames(DEgene.young.F1)
 
 dim(DEgene.young.F1) #4024 genes 
 dim(sleuth_significant) # 2370 genes
 
-matchesWithRuijuan <- semi_join(sleuth_significant, DEgene.young.F1)
-dim(matchesWithRuijuan) #1811 out of 2370 genes in common
+matches <- semi_join(sleuth_significant, DEgene.young.F1)
+dim(matches) #1811 out of 2370 genes in common
 ```
+
+We used a different filtering method for the edgeR analysis, keeping only genes with at least 10 reads in at least 3 samples.  
+Since I only looked at DE in young samples, I need to use the old read counts to get the same filtered reads.  
+```{r}
+reads <- read.table("read.count.tsv", header = T, check.names = F)
+
+# filter based on read count 
+filteredReads <- reads[rowSums(reads[,-1] > 10) >= 3,]
+dim(filteredReads) #60176 genes remain
+
+sleuth_significant_filtered <- semi_join(sleuth_significant, filteredReads, by = c("target_id" = "ID"))
+sleuth_significant_removed <- anti_join(sleuth_significant, filteredReads, by = c("target_id" = "ID"))
+dim(sleuth_significant_filtered) # 2316 genes passed both filters
+dim(sleuth_significant_removed) # 54 genes passed sleuth's basic filter, but not our edgeR filter.
+```
+
 
 ## Allele Specific Expression Lynn's vs Ruijuan's
 
-Loading Ruijuan's results using a different method, which used binomial model only
+Loading Ruijuan's results using a different method, which used a binomial model only
 
 ```{r}
-load("ASE_gene.Rdata")
+load("ASE_gene.Rdata") # Ruijuan's results
 length(ASE_gene) # 2530 genes found in ASE by Ruijuan
 
-matchesWithRuijuan <- intersect(ASE_gene, total)
-length(matchesWithRuijuan) # 554 out of 666 genes agreed using binomial model
+load("aseGenesBinom") # 666 genes
+load("aseGenesBeta") # 96 genes
 
-matchesWithRuijuanb <- intersect(ASE_gene, totalb)
-length(matchesWithRuijuanb) # 70 out of 96 genes using beta-binomial model
+matches <- intersect(ASE_gene, aseGenesBinom)
+length(matches) # 554 out of 666 genes agreed using binomial model
+
+matches <- intersect(ASE_gene, aseGenesBeta)
+length(matches) # 70 out of 96 genes using beta-binomial model
+```
+
+## Comparisons to eQTL lists
+
+```{r}
 
 ```
+
