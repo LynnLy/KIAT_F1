@@ -1,0 +1,77 @@
+---
+title: "Comparison to Ruijuan's Results"
+author: "Lynn Ly"
+date: "2/22/2018"
+output: html_document
+---
+
+# Comparisons between Lynn's ASE and DE results, and comparisons between Lynn's and Ruijuan's results
+
+## Lynn's ASE and DE Results
+
+```{r, include = FALSE}
+library(tidyverse)
+library(sleuth)
+library(MBASED)
+```
+
+```{r}
+so <- sleuth_load("sleuthResultsSubset.Rdata")
+
+sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
+sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
+
+dim(sleuth_significant) # Genes that are significantly differentially expressed
+
+load("totalb.Rdata")
+DEgenes <- sleuth_significant$target_id
+
+diffASEandDE <- intersect(totalb, DEgenes)
+diffASEnoDE <- setdiff(totalb, DEgenes)
+sameASEandDE <- setdiff(DEgenes, totalb)
+
+fisher.test()
+```
+
+
+Comparison to allele specific expression results in MBASED
+```{r}
+load("totalb.Rdata")
+DEgenes <- sleuth_significant$target_id
+
+diffASEandDE <- intersect(totalb, DEgenes)
+diffASEnoDE <- setdiff(totalb, DEgenes)
+sameASEandDE <- setdiff(DEgenes, totalb)
+
+fisher.test()
+```
+
+## Differential Expression Lynn's vs Ruijuan's
+
+Comparison to Ruijuan's DE genes from edgeR
+```{r}
+load("DEgene.gt.F1.Rdata")
+DEgene.young.F1$target_id <- rownames(DEgene.young.F1)
+
+dim(DEgene.young.F1) #4024 genes 
+dim(sleuth_significant) # 2370 genes
+
+matchesWithRuijuan <- semi_join(sleuth_significant, DEgene.young.F1)
+dim(matchesWithRuijuan) #1811 out of 2370 genes in common
+```
+
+## Allele Specific Expression Lynn's vs Ruijuan's
+
+Loading Ruijuan's results using a different method, which used binomial model only
+
+```{r}
+load("ASE_gene.Rdata")
+length(ASE_gene) # 2530 genes found in ASE by Ruijuan
+
+matchesWithRuijuan <- intersect(ASE_gene, total)
+length(matchesWithRuijuan) # 554 out of 666 genes agreed using binomial model
+
+matchesWithRuijuanb <- intersect(ASE_gene, totalb)
+length(matchesWithRuijuanb) # 70 out of 96 genes using beta-binomial model
+
+```
