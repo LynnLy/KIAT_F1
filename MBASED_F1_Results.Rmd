@@ -113,24 +113,9 @@ matches <- intersect(genesb, genesRevb) # 86 genes in agreement
 differences414 <- setdiff(genesb, genesRevb) # 2 genes unique when 414 is the first sample
 differences415 <- setdiff(genesRevb, genesb) # 8 genes unique when 415 is the first sample
 
-total <- union(genes, genesRev) # All the genes 
-totalb <- union(genesb, genesRevb) # All the genes 
+genesDiffASEBinom <- union(genes, genesRev) # All the genes 
+genesDiffASEBeta <- union(genesb, genesRevb) # All the genes 
 matchesBetweenBetaAndBinomial <- intersect(total, totalb)
 
-save(totalb, file = "totalb.Rdata")
+save(genesDiffASEBeta, file = "genesDiffASEBeta.Rdata")
 ```
-
-
-Loading Ruijuan's results using a different method, which used binomial model only
-```{r}
-load("ASE_gene.Rdata")
-length(ASE_gene) # 2530 genes found in ASE by Ruijuan
-
-matchesWithRuijuan <- intersect(ASE_gene, total)
-length(matchesWithRuijuan) # 554 out of 666 genes agreed using binomial model
-
-matchesWithRuijuanb <- intersect(ASE_gene, totalb)
-length(matchesWithRuijuanb) # 70 out of 96 genes using beta-binomial model
-
-```
-

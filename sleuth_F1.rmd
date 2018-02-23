@@ -54,14 +54,8 @@ Include gene-names into transcript-level analysis
 ```{r include = FALSE}
 # Initialize sleuth object
 so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
-
-# Full model 
 so <- sleuth_fit(so, ~cultivar, 'full')
-
-# Reduced model
 so <- sleuth_fit(so, ~1, 'reduced')
-
-# Compare the two models
 so <- sleuth_lrt(so, 'reduced', 'full')
 ```
 
@@ -106,54 +100,45 @@ sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
 dim(sleuth_significant) # Genes that are significantly differentially expressed
 ```
 
-Comparison to Ruijuan's DE genes from edgeR
-```{r}
-load("DEgene.gt.F1.Rdata")
-DEgene.young.F1$target_id <- rownames(DEgene.young.F1)
-
-dim(DEgene.young.F1) #4024 genes 
-dim(sleuth_significant) # 2370 genes
-
-matchesWithRuijuan <- semi_join(sleuth_significant, DEgene.young.F1)
-dim(matchesWithRuijuan) #1811 out of 2370 genes in common
-```
-
-Comparison to allele specific expression results in MBASED
-```{r}
-load("totalb.Rdata")
-DEgenes <- sleuth_significant$target_id
-
-
-diffASEandDE <- intersect(totalb, DEgenes)
-diffASEnoDE <- setdiff(totalb, DEgenes)
-sameASEandDE <- setdiff(DEgenes, totalb)
-
-fisher.test()
-```
-
 ## Sleuth only on genes with SNVs
 
 To check for enrichment of ASE in DE genes, we need to rerun the analysis using only genes that contain SNVs in them, because ASE cannot be detected in homozygous genes.  
-To do this, we have to use `read_kallisto_hdf5()` and `write_kallisto_hdf5()` to subset our data. 
-
+To do this, we have to use `subset_kallisto_custom()` and a modified `write_kallisto_hdf5()` to subset our data. 
 
 ```{r}
-source("subset_kallisto.R")
 load("phasedData.Rdata")
 geneIDs <- as.character(unique(phasedData$GeneID))
 
 sample_id <- dir(file.path("results"))
 
-kal_subset_dirs <- file.path("results_subset", sample_id, "kallisto")
-kal_subset_dirs
+kal_dirs_subset <- file.path("results_subset", sample_id, "kallisto")
+kal_dirs_subset
+```
+
+Only need to run this once: Subset the kallisto objects. 
+```{r, eval = FALSE}
+source("subset_kallisto.R")
 
 LoadModifyWrite <- function(kal_dir) {
   # First, load kallisto object. Then, subset kallisto object. Then, write new, subsetted version to the original location
   obj <- read_kallisto(kal_dir)
-  obj <- subset_kallisto(obj, target_ids = geneIDs)
+  obj <- subset_kallisto_custom(obj, target_ids = geneIDs)
   write_kallisto_hdf5(kal = obj, fname = file.path(kal_dir, "abundance.h5"))
 }
 
-lapply(kal_subset_dirs, LoadModifyWrite)
+lapply(kal_dirs_subset, LoadModifyWrite)
 ```
 
+## New sleuth object
+
+```{r, eval = FALSE}
+metadata <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
+metadata <- metadata[1:6, ]# young tissue only
+metadata <- dplyr::mutate(metadata, path = kal_dirs_subset)
+metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path)
+
+so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
+so <- sleuth_fit(so, ~cultivar, 'full')
+so <- sleuth_fit(so, ~1, 'reduced')
+so <- sleuth_lrt(so, 'reduced', 'full')
+```
