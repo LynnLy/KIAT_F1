@@ -113,9 +113,10 @@ matches <- intersect(genesb, genesRevb) # 86 genes in agreement
 differences414 <- setdiff(genesb, genesRevb) # 2 genes unique when 414 is the first sample
 differences415 <- setdiff(genesRevb, genesb) # 8 genes unique when 415 is the first sample
 
-genesDiffASEBinom <- union(genes, genesRev) # All the genes 
-genesDiffASEBeta <- union(genesb, genesRevb) # All the genes 
+aseGenesBinom <- union(genes, genesRev) # All the genes 
+aseGenesBeta <- union(genesb, genesRevb) # All the genes 
 matchesBetweenBetaAndBinomial <- intersect(total, totalb)
 
-save(genesDiffASEBeta, file = "genesDiffASEBeta.Rdata")
+save(aseGenesBeta, file = "aseGenesBeta.Rdata")
+save(aseGenesBinom, file = "aseGenesBinom.Rdata")
 ```
