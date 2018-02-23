@@ -87,9 +87,9 @@ youngDE <- decideTestsDGE(youngLRT, p = 0.05)
 summary(youngDE) # 668 downreg, 9849 neither, 764 upreg
 
 # A sorted list of all the significant DE genes
-youngDEGenes <- topTags(youngLRT,n = Inf)$table[topTags(youngLRT,n = Inf)$table$FDR<0.05,]
+youngDEGenes_subset <- topTags(youngLRT,n = Inf)$table[topTags(youngLRT,n = Inf)$table$FDR<0.05,]
 
-save(youngDEGenes, file = "youngDEGenes.Rdata")
+save(youngDEGenes_subset, file = "youngDEGenes_subset.Rdata")
 
 ```
 
