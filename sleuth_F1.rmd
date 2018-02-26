@@ -7,15 +7,16 @@ editor_options:
   chunk_output_type: console
 ---
 
+This document includes general sleuth usage and quality control. Although I included some calls to `sleuth_prep()` here, I used **Run_Sleuth.R** to actually run those commands in order to use multiple cores.  
+For analysis of final results, see the bottom of the document after the Analysis subheader.
+
 ```{r setup, include=FALSE}
 library(sleuth)
-
-# set the number of available cores to 4
-options(mc.cores = 4L)
 ```
 
 # Preliminaries
 
+The kallisto results were generated using **kallisto_F1.sh**.
 ```{r}
 sample_id <- dir(file.path("results"))
 
@@ -28,7 +29,7 @@ Get the metadata from our experiment summary table and add a new column, path, l
 metadata <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
 metadata <- metadata[1:6, ]# young tissue only
 metadata <- dplyr::mutate(metadata, path = kal_dirs)
-metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path, rep)
+metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path)
 ```
 
 This next chunk is not for sleuth, but to identify which genes we did not filter out when using edgeR, so we can compare them later. Although I only looked at young tissue in this analysis, the filtering parameter was on samples from all tissue types.
@@ -42,8 +43,6 @@ filteredReads <- reads[rowSums(reads[,-1] > 10) >= 3,]
 dim(filteredReads) #60176 genes remain
 ```
 
-
-
 Include gene-names into transcript-level analysis  
 **Not necessary, as we included the gene names when we created the kallisto index. However, we cannot do transcript-level analysis, only gene level**
 ```{r}
@@ -53,58 +52,15 @@ Include gene-names into transcript-level analysis
 # t2g <- dplyr::rename(t2g, target_id = ensembl_transcript_id, ens_gene = ensembl_gene_id, ext_gene = external_gene_name)
 ```
 
-
-```{r cache=TRUE}
+```{r include = FALSE}
 # Initialize sleuth object
 so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
-
-# Full model 
 so <- sleuth_fit(so, ~cultivar, 'full')
-so <- sleuth_fit(so, ~rep + cultivar, 'fullRep')
-
-# Reduced model
 so <- sleuth_fit(so, ~1, 'reduced')
-so <- sleuth_fit(so, ~rep, 'reducedRep')
-```
-
-Compare the two models
-
-```{r}
 so <- sleuth_lrt(so, 'reduced', 'full')
-so <- sleuth_lrt(so, 'reducedRep', 'fullRep')
-
-sleuth_save(so, file = "results/sleuthOutput.Rdata")
-#save(metadata, file = "metadata.Rdata")
-sleuth_load("results/SleuthOutput.Rdata")
-#load("metadata.Rdata")
 ```
 
-# Analysis
-
-In general, sleuth can utilize the likelihood ratio test with any pair of models that are nested
-The results of the test can be examined with
-```{r}
-sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
-sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
-
-sleuth_table_rep <- sleuth_results(so, 'reducedRep:fullRep', 'lrt', show_all = FALSE)
-sleuth_significant_rep <- dplyr::filter(sleuth_table_rep, qval <= 0.05)
-
-
-difference <- anti_join(sleuth_significant_rep, sleuth_significant, by = "target_id")
-same <- semi_join(sleuth_significant_rep, sleuth_significant, by = "target_id")
-
-head(sleuth_significant, 20)
-dim(sleuth_significant) # Genes that are significantly differentially expressed
-```
-
-The table shown above displays the top 20 significant genes with a (Benjamini-Hochberg multiple testing corrected) q-value <= 0.05.
-
-```{r}
-plot_bootstrap(so, "BnaC03g34410D", units = "est_counts", color_by = "cultivar")
-plot_bootstrap(so, "BnaA02g22240D", units = "est_counts", color_by = "cultivar")
-```
-
+# Quality Control 
 
 The easiest way to view and interact with the results is to generate the sleuth live site that allows for exploratory data analysis:
 
@@ -113,10 +69,13 @@ sleuth_live(so)
 ```
 
 Among the tables and visualizations that can be explored with sleuth live are a number of plots that provide an overview of the experiment. For example, a PCA plot provides a visualization of the samples:
+`
 ```{r}
-plot_pca(so, color_by = 'cultivar', units = "est_counts")
 plot_pca(so, color_by = 'cultivar', units = "tpm")
 ```
+`plot_loadings()` shows us which individual genes contributed the most to a specific component.  
+Looking closely, most of the variation in PC 1 is contributed by one gene.  
+I'm not too worried about clustering, but TODO: check PCA plot using log transformed values
 
 ```{r}
 plot_loadings(so, pc_input = 1, units = "tpm")
@@ -125,29 +84,62 @@ plot_loadings(so, pc_input = 1, units = "tpm")
 plot_bootstrap(so, "BnaC09g16500D", units = "est_counts", color_by = "cultivar")
 ```
 
-## Removing Outlier BnaC09g16500D
-
-```{r}
-metadata <- dplyr::filter(metadata, sample != "BnaC09g16500D")
-so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
-
-so <- sleuth_fit(so, ~cultivar, 'full')
-so <- sleuth_fit(so, ~rep + cultivar, 'fullRep')
-
-so <- sleuth_fit(so, ~1, 'reduced')
-so <- sleuth_fit(so, ~rep, 'reducedRep')
-```
-```
-
-
-
-
-Various quality control metrics can also be examined. The count distributions for each sample (grouped by condition) can be displayed using the `plot_group_density` command:
-
 ```{r}
 plot_group_density(so, use_filtered = TRUE, units = "est_counts",
   trans = "log", grouping = setdiff(colnames(so$sample_to_covariates),
   "sample"), offset = 1)
 ```
 
+# Analysis
 
+```{r}
+so <- sleuth_load("sleuthOutput.Rdata")
+
+sleuth_table <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
+sleuth_significant <- dplyr::filter(sleuth_table, qval <= 0.05)
+
+dim(sleuth_significant) # Genes that are significantly differentially expressed
+```
+
+## Sleuth only on genes with SNVs
+
+To check for enrichment of ASE in DE genes, we need to rerun the analysis using only genes that contain SNVs in them, because ASE cannot be detected in homozygous genes.  
+To do this, we have to use `subset_kallisto_custom()` and a modified `write_kallisto_hdf5()` to subset our data. 
+
+```{r}
+load("phasedData.Rdata")
+geneIDs <- as.character(unique(phasedData$GeneID))
+
+sample_id <- dir(file.path("results"))
+
+kal_dirs_subset <- file.path("results_subset", sample_id, "kallisto")
+kal_dirs_subset
+```
+
+Only need to run this once: Subset the kallisto objects. 
+```{r, eval = FALSE}
+source("subset_kallisto.R")
+
+LoadModifyWrite <- function(kal_dir) {
+  # First, load kallisto object. Then, subset kallisto object. Then, write new, subsetted version to the original location
+  obj <- read_kallisto(kal_dir)
+  obj <- subset_kallisto_custom(obj, target_ids = geneIDs)
+  write_kallisto_hdf5(kal = obj, fname = file.path(kal_dir, "abundance.h5"))
+}
+
+lapply(kal_dirs_subset, LoadModifyWrite)
+```
+
+## New sleuth object
+
+```{r, eval = FALSE}
+metadata <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
+metadata <- metadata[1:6, ]# young tissue only
+metadata <- dplyr::mutate(metadata, path = kal_dirs_subset)
+metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path)
+
+so <- sleuth_prep(metadata, extra_bootstrap_summary = TRUE)
+so <- sleuth_fit(so, ~cultivar, 'full')
+so <- sleuth_fit(so, ~1, 'reduced')
+so <- sleuth_lrt(so, 'reduced', 'full')
+```

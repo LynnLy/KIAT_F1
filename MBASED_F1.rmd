@@ -4,11 +4,16 @@ author: Lynn Ly
 output: html_document
 ---
 
-Purpose: This uses the MBASED package to analyze allele specific expression.  
-  Single sample analysis: Find genes that display allelic imbalance ie. not expressed 0.5/0.5. Default threshold: 0.7   
-  Two sample analysis: Find genes that display different ASE ratios between two samples with the SAME HAPLOTYPE. Doesn't matter what the actual ratios are, as long as they differ by over 0.2. **IMPORTANT:** Two sample analysis is one-tailed. If it finds a large MAF difference, but it's negative, then the p-value will be high. This means results are NOT symmetrical, so pay attention to the order of the conditions that you're comparing.  
-Inputs: Pre-filtered VCF file, simplified gff file with just ranges and feature name  
-Outputs of this file: Phased data with gene annotations and estimates of reference bias and dispersion  
+## This uses the MBASED package to analyze allele specific expression.  
+
+  Single sample analysis: Find genes that display allelic imbalance ie. not expressed 0.5/0.5. Default threshold: 0.7 
+  
+  Two sample analysis: Find genes that display different ASE ratios between two samples with the SAME HAPLOTYPE. Doesn't matter what the actual ratios are, as long as they differ by over 0.2. **IMPORTANT:** Two sample analysis is one-tailed. In certain cases, a large but negative MAF difference, will still have a high p-value. This means results are NOT symmetrical, so pay attention to the order of the conditions  
+  
+**Inputs:** Pre-filtered VCF file, simplified gff file with just ranges and feature name  
+
+**Outputs of this file:** Phased data with gene annotations and estimates of reference bias and dispersion  
+
 End MBASED Outputs: major allele frequencies, frequency differences, list of genes displaying ASE  
 
 ```{r setup, include=FALSE}
@@ -17,7 +22,7 @@ library(tidyverse)
 library(VGAM)
 ```
 
-AnnotateSNPs Function
+# AnnotateSNPs  
 
 ```{r AnnotateSNPs Function}
 # Modified from Ruijuan's function in helpler.R
@@ -113,7 +118,8 @@ TwoSample <- function(annotatedData, mySNVs, genotype1, genotype2, numSim = 0){
 } 
 ```
 
-Filtering Functions: `CoverageFilter()` requires at least 10 reads for a SNV, and that at least 10% of all reads support each allele. **We may want to return to reads discarded by this**, especially ones that were discarded from the second clause. These may include genes where one allele is completely silenced.  
+### Filtering Functions  
+`CoverageFilter()` requires at least 10 reads for a SNV, and that at least 10% of all reads support each allele. **We may want to return to reads discarded by this**, especially ones that were discarded from the second clause. These may include genes where one allele is completely silenced.  
 `RangeFilter()` discards SNVs that are within 10bp of another called SNV, in order to ensure read independence.  
 ```{r Filtering Functions}
 
@@ -165,13 +171,14 @@ RangeFilter <- function(vcf) {
 }
 ```
 
+### Global Reference Bias and Dispersion
+
 `CalcReferenceBias()` is based on this quote from the paper: "We assumed that fref,SNV (0.5) is constant across all SNVs within a sample (global reference bias), and we estimated this value as  
 `Nref/Ntotal`  
 which is the ratio of all reference reads to total reads in the sample, after excluding the loci with the top 5% of read counts (trimmed for robustness)"
 
-`CalcDispersion()` finds the most likely rho (dispersion) for our data using maximum likelihood estimation.  
-The purpose of this is to estimate the parameters we need to use when MBASED samples from a beta-binomial distribution.
-
+`CalcDispersion()` finds the most likely rho (dispersion) for our data using **maximum likelihood estimation.**  
+The purpose of this is to estimate the parameters we need to use when MBASED samples from a beta-binomial distribution.  
 ```{r Estimate Overdispersion and Reference Allele Bias}
 # If our data presents any, we should include these metrics when creating mySNVs. 
 # Use the additional functions in MBASED
