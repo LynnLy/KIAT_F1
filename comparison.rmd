@@ -38,6 +38,8 @@ ExtractGenes.data.frame <- function(df) {
     return(df$target_id) 
   } else if ("GeneID" %in% colnames(df)) {
     return(df$GeneID)
+  } else if ("trait" %in% colnames(df)) {
+    return(df$trait)
   } else {
     return(rownames(df))
   }
@@ -175,7 +177,10 @@ fisher.test(ASE_DE_SNP)
 
 Modified version of AnnotatedSNPs, just to get a list of genes that could be possible eQTLs
 ```{r}
-ExtracteQTLgenes <- function(eQTLdata, gff.mRNA){
+AnnotateeQTLs <- function(eQTLdata, gff.mRNA = gff.mRNA){
+  # Takes the list of eQTLs, and appends genes that fall within the eQTL interval. 
+  eQTLdata <- eQTLdata[, c(1, 3, 5, 6)]
+  colnames(eQTLdata) <- c("trait", "CHROM", "START", "END")
   colnames(gff.mRNA) <- c("CHROM", "start", "end", "name") 
   
   genes <- GRanges(seqnames = Rle(gff.mRNA$CHROM),
@@ -196,8 +201,21 @@ ExtracteQTLgenes <- function(eQTLdata, gff.mRNA){
   annotatedeQTLdata <- eQTLdata %>% 
     left_join(as.data.frame(overlappedGenes), by=c("CHROM", "START", "END")) 
   
+  cat("\n", length(unique(annotatedeQTLdata$Genes)), "genes overlap with the potential eQTL intervals")
+  
   return(annotatedeQTLdata)  
+  
 }
+
+FiltereQTLs <- function(eQTLs, genelist) {
+  # Takes the list of eQTLs, and returns the list subsetted to contain only genes in genelist that have an eQTL.
+  eQTLgenes <- ExtractGenes(eQTLs)
+  cat("\n", length(intersect(eQTLgenes, genelist)), " out of ", length(genelist)," genes had an eQTL") 
+  eQTLs <- eQTLs[which(eQTLs$gene_ID %in% genelist), ]
+  return(eQTLs)
+}
+
+
 ```
 
 Ruijuan asks:
@@ -209,14 +227,12 @@ Ruijuan asks:
 load("cis_trans_result_new_flipped.Rdata") # eQTL lists from F2
 gff.mRNA <- read.table("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/ruijuanli/Reference/B.napus/gff.mRNA")
 
-trans_eQTL <- trans_eQTL[, c(1, 3, 5, 6)]
-colnames(trans_eQTL) <- c("trait", "CHROM", "START", "END")
 eQTLgenes <- trans_eQTL$gene_ID
 ciseQTLgenes <- cis_eQTL$gene_ID
 
 trans_eQTL_DE <- intersect(eQTLgenes, DEgenes) #360 out of 1432 DEGs are regulated by trans-eQTLs
 cis_eQTL_DE <- intersect(ciseQTLgenes, DEgenes) # 758 are regulated by cis-eQTLs
-cis_trans <- intersect(cis_eQTL_DE, trans_eQTL_DE) # 128 in both lists
+cis_trans_DE <- intersect(cis_eQTL_DE, trans_eQTL_DE) # 128 in both lists
 
 trans_eQTL_ASE <- intersect(eQTLgenes, aseGenesBeta)
 cis_eQTL_ASE <- intersect(ciseQTLgenes, aseGenesBeta)
@@ -226,33 +242,13 @@ cis_trans_ASE <- intersect(cis_eQTL_ASE, trans_eQTL_ASE)
 Filter to only examine trans-eQTL intervals for these 360 DEGs
 THIS IS NOT USEFUL. Almost all genes are represented in the trans-eQTL intervals.
 ```{r}
-trans_eQTL_DE <- trans_eQTL[which(trans_eQTL$gene_ID %in% trans_eQTL_DE), ]
-# Annotate the eQTL intervals with genes that fall within them
-trans_eQTL_DE <- trans_eQTL_DE[, c(1, 3, 5, 6)]
-colnames(trans_eQTL_DE) <- c("trait", "CHROM", "START", "END")
-trans_eQTL_DE <- ExtracteQTLgenes(trans_eQTL_DE, gff.mRNA)
+trans_eQTL_DE <- AnnotateeQTLs(FiltereQTLs(trans_eQTL, DEgenes), gff.mRNA)
+cis_eQTL_DE <- AnnotateeQTLs(FiltereQTLs(cis_eQTL, DEgenes), gff.mRNA)
 
-length(unique(trans_eQTL_DE$Genes)) # 71246 genes overlap with the potential eQTL intervals
-# This is not useful. 71k out of 100k genes
+trans_eQTL_ASE <- AnnotateeQTLs(FiltereQTLs(trans_eQTL, aseGenesBeta), gff.mRNA)
+cis_eQTL_ASE <- AnnotateeQTLs(FiltereQTLs(cis_eQTL, aseGenesBeta), gff.mRNA)
 ```
 
-Done for trans and ASE
-```{r}
-trans_eQTL_ASE <- trans_eQTL[which(trans_eQTL$gene_ID %in% trans_eQTL_ASE), ]
-# Annotate the eQTL intervals with genes that fall within them
-trans_eQTL_ASE <- trans_eQTL_ASE[, c(1, 3, 5, 6)]
-colnames(trans_eQTL_ASE) <- c("trait", "CHROM", "START", "END")
-trans_eQTL_ASE <- ExtracteQTLgenes(trans_eQTL_ASE, gff.mRNA)
 
-length(unique(trans_eQTL_ASE$Genes)) # 20147 genes overlap with the potential eQTL intervals
-```
-```{r}
-cis_eQTL_ASE <- cis_eQTL[which(cis_eQTL$gene_ID %in% cis_eQTL_ASE), ]
-# Annotate the eQTL intervals with genes that fall within them
-cis_eQTL_ASE <- cis_eQTL_ASE[, c(1, 3, 5, 6)]
-colnames(cis_eQTL_ASE) <- c("trait", "CHROM", "START", "END")
-cis_eQTL_ASE <- ExtracteQTLgenes(cis_eQTL_ASE, gff.mRNA)
 
-length(unique(cis_eQTL_ASE$Genes)) # 20147 genes overlap with the potential eQTL intervals
-```
 
