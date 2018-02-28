@@ -1,0 +1,102 @@
+---
+title: "GOSeq"
+author: "Lynn Ly"
+date: "2/26/2018"
+output: html_document
+---
+
+Inputs to goseq : A simple named vector containing  
+1. Measured genes: all genes for which RNA-seq data was gathered for your experiment. Each element of your vector should be named by a unique gene identifier.  
+2. Differentially expressed genes: Each element of your vector should be either a 1 or a 0
+
+```{r setup, include=FALSE}
+library(goseq)
+library(GO.db)
+library(ShortRead)
+```
+
+goseq first quantifies the length bias present using a Probability Weighting Function. This gives the chance that a gene will be DE based on its length alone. goseq establishes a null distribution, and then each GO category is tested for under/over representation amongst the set of DEG, and the null is used to calculate a p-value for under/over representation. 
+
+```{r}
+Bn_cdna <- readDNAStringSet("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/ruijuanli/Reference/B.napus/Brassica_napus.annotation_v5.cds_modified.fa")
+head(Bn_cdna)
+bias <- nchar(Bn_cdna)
+names(bias) <- names(Bn_cdna)
+length(bias)
+```
+
+```{r}
+Bngo <- read.table("/Network/Servers/avalanche.plb.ucdavis.edu/Volumes/Mammoth/Users/ruijuanli/Reference/B.napus/Brassica_napus_GO")
+head(Bngo)
+BngoList <- tapply(as.character(Bngo$V2), Bngo$V1, c)
+head(BngoList)
+save(BngoList, file = "BngoList.Rdata")
+```
+
+Ruijuan's goseq function
+```{r}
+GOseq.Bn.ORA<-function(genelist, gene2cat, padjust=0.05, ontology="BP") {
+  TF<-(names(bias) %in% genelist)*1
+  names(TF)<-names(bias)
+  pwf<-nullp(TF,bias.data=bias)
+
+  GO.pval <- goseq(pwf,gene2cat=gene2cat,use_genes_without_cat=TRUE)
+  View(GO.pval)
+  
+  if(ontology=="BP") {
+    GO.pval2<-subset(GO.pval,ontology=="BP")
+  } else if(ontology=="CC") {
+    GO.pval2<-subset(GO.pval,ontology=="CC")
+  } else {
+    GO.pval2<-subset(GO.pval,ontology=="MF")
+  }
+
+  GO.pval2$over_represented_padjust<-p.adjust(GO.pval2$over_represented_pvalue,method="BH")
+  if(GO.pval2$over_represented_padjust[1]>padjust) stop("no enriched GO")
+  else {
+    enriched.GO<-GO.pval2[GO.pval2$over_represented_padjust<padjust,]
+    print("enriched.GO is")
+    print(enriched.GO)
+
+    ## write Term and Definition
+    for(i in 1:dim(enriched.GO)[1]) {
+      #enriched.GO$Term[i]<-Term(GOTERM[[enriched.GO[i,"category"]]])
+      enriched.GO$Definition[i]<-Definition(GOTERM[[enriched.GO[i,"category"]]])
+    }
+    return(enriched.GO)
+  }
+}
+```
+
+
+```{r}
+genelist <- ExtractGenes(DEgene.young.F1)
+BP <- GOseq.Bn.ORA(genelist, gene2cat = BngoList, ontology = "BP")
+CC <- GOseq.Bn.ORA(genelist, gene2cat = BngoList, ontology = "CC")
+MF <- GOseq.Bn.ORA(genelist, gene2cat = BngoList, ontology = "MF")
+```
+
+```{r}
+genesWithSNVs <- ExtractGenes(phasedData)
+BngoList_subset <- BngoList[which(rownames(BngoList) %in% genesWithSNVs)]
+save(BngoList_subset, file = "BngoList_subset.Rdata")
+```
+
+```{r}
+load("BngoList_subset.Rdata")
+genelist <- aseGenesBeta
+genelist <- aseGenesBinom
+BP <- GOseq.Bn.ORA(genelist, gene2cat = BngoList_subset, ontology = "BP")
+CC <- GOseq.Bn.ORA(genelist, gene2cat = BngoList_subset, ontology = "CC")
+MF <- GOseq.Bn.ORA(genelist, gene2cat = BngoList_subset, ontology = "MF")
+```
+
+
+
+
+
+
+
+
+
+
