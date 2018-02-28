@@ -108,14 +108,16 @@ Loading Ruijuan's results using a different method, which used a binomial model 
 load("ASE_gene.Rdata") # Ruijuan's results
 length(ASE_gene) # 2530 genes found in ASE by Ruijuan
 
-load("aseGenesBinom") # 666 genes
-load("aseGenesBeta") # 96 genes
+load("aseGenesBinom.Rdata") # 666 genes
+load("aseGenesBeta.Rdata") # 96 genes
 
 matches <- intersect(ASE_gene, aseGenesBinom)
 length(matches) # 554 out of 666 genes agreed using binomial model
 
 matches <- intersect(ASE_gene, aseGenesBeta)
 length(matches) # 70 out of 96 genes using beta-binomial model
+
+
 ```
 
 ## Lynn's ASE and DE Results
@@ -247,6 +249,8 @@ cis_eQTL_DE <- AnnotateeQTLs(FiltereQTLs(cis_eQTL, DEgenes), gff.mRNA)
 
 trans_eQTL_ASE <- AnnotateeQTLs(FiltereQTLs(trans_eQTL, aseGenesBeta), gff.mRNA)
 cis_eQTL_ASE <- AnnotateeQTLs(FiltereQTLs(cis_eQTL, aseGenesBeta), gff.mRNA)
+
+trans_eQTL_ASE_DE <- FiltereQTLs(trans_eQTL, diffASEyesDE) %>% AnnotateeQTLs(gff.mRNA)
 ```
 
 

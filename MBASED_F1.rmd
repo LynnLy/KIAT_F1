@@ -207,6 +207,7 @@ CalcDispersion <- function(vcf, genotype, refBias) {
   
   # To eliminate potential artifacts that may affect the model fit, we require that the SNV be detected in at least 2 samples, with at least one sample presenting the reference as major and one presenting the alternate as major
   # I'm not sure if this should apply to our data. We already pooled our samples; should we depool?
+  # However, without this step, the dispersion far exceeds the "normal" range.
   vcf <- vcf %>%
     mutate(F1_414_ROFreq = F1_414_RO / F1_414_DP > 0.5,
            F1_415_ROFreq = F1_415_RO / F1_415_DP > 0.5) %>%
