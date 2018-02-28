@@ -2,6 +2,9 @@ library(shiny)
 library(ggplot2)
 library(reshape2)
 library(sleuth)
+library(GO.db)
+
+load("data/BngoList.Rdata")
 
 # plot_bootstrap is taken from the sleuth shiny app
 plot_bootstrap <- function(obj,
@@ -19,7 +22,6 @@ plot_bootstrap <- function(obj,
                       upper = upper, ymax = max))
   p <- p + geom_boxplot(stat = "identity", aes_string(fill = color_by))
   p <- p + theme(axis.text.x = element_text(angle = x_axis_angle, hjust = 1))
-  p <- p + ggtitle(target_id)
   p <- p + ylab(units)
   if (divide_groups) {
     p <- p + facet_wrap(color_by, switch = 'x', scales = 'free_x')
@@ -34,7 +36,7 @@ shinyServer(function(input, output) {
     
     ggplot(visualDataTidy[visualDataTidy$GeneID == input$gene,]) + 
       geom_bar(aes(x = allele, y = reads, fill = allele), stat = "identity") + facet_wrap(~cultivar) +
-      ylab("reads") + ggtitle(input$gene)
+      ylab("reads") 
     
   })
   
@@ -49,5 +51,21 @@ shinyServer(function(input, output) {
     plot_bootstrap(so, input$gene, color_by = "cultivar")
   })
  
+  output$selectedGene <- renderText({
+    paste(input$gene)
+  })
+  
+  output$GOinfo <- renderPrint({
+    goTerms <- BngoList[[input$gene]]
+    info <- vector(mode = "character", length = length(goTerms))
+    info2 <- vector(mode = "character", length = length(goTerms))
+    for(i in 1:length(goTerms)) {
+      info[i] <- Term(GOTERM[[goTerms[i]]])
+      info2[i] <- Definition(GOTERM[[goTerms[i]]])
+    }
+    info <- cbind(info, info2)
+    info
+    
+  })
   
 })

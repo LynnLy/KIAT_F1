@@ -16,8 +16,10 @@ ui <- fluidPage(
     ),
                  
     mainPanel(
+      textOutput("selectedGene"),
       plotOutput("barPlot"),
-      plotOutput("sleuthPlot")
+      plotOutput("sleuthPlot"),
+      textOutput("GOinfo")
       )
     )
   )

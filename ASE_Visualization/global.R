@@ -2,7 +2,8 @@ library(sleuth)
 load("data/phasedData.Rdata")
 load("data/aseGenesBeta.Rdata")
 load("data/youngDEGenes_subset.Rdata")
-load("data/SleuthOutput.Rdata")
+so <- sleuth_load("data/SleuthObject")
+
 
 visualData <- phasedData[, c("F1_414_RO", "F1_414_AO", "F1_415_RO", "F1_415_AO", "GeneID")]
 
