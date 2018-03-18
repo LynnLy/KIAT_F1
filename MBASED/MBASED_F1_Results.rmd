@@ -1,0 +1,122 @@
+---
+title: "MBASED_F1_Results"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(MBASED)
+library(tidyverse)
+```
+
+Helper Functions for summarizing results and getting significant ones
+```{r Analyzing Results Functions}
+SummarizeASEResults_2s <- function(MBASEDOutput) {
+  # Output: geneOutputDF is an easier way to look at MAF and p-values at the same time
+  geneOutputDF <- data.frame(
+    majorAlleleFrequencyDifference=assays(MBASEDOutput)$majorAlleleFrequencyDifference[,1],
+    pValueASE=assays(MBASEDOutput)$pValueASE[,1],
+    pValueHeterogeneity=assays(MBASEDOutput)$pValueHeterogeneity[,1]
+  )
+  
+  lociOutputGR <- rowRanges(metadata(MBASEDOutput)$locusSpecificResults)
+  lociOutputGR$allele1IsMajor <- assays(metadata(MBASEDOutput)$locusSpecificResults)$allele1IsMajor[,1]
+
+  lociOutputGR$MAFDifference <- assays(metadata(MBASEDOutput)$locusSpecificResults)$MAFDifference[,1]
+  lociOutputList <- split(lociOutputGR, factor(lociOutputGR$aseID, levels=unique(lociOutputGR$aseID)))
+  return(list(geneOutput=geneOutputDF, locusOutput=lociOutputList))
+}
+
+ExtractASE <- function(MBASEDOutput) {
+  # Extract only desired genes
+  # Modify ASEindexes to vary the strictness of selection.
+  
+  results <- SummarizeASEResults_2s(MBASEDOutput)
+
+  # Apply Benjamini-Hochberg (fdr) correction for multiple testing
+  adjustedP <- p.adjust(results$geneOutput$pValueASE, method = "BH", n = length(results$geneOutput$pValueASE))
+  
+  ASEindexes <- adjustedP < 0.05 & 
+    abs(results$geneOutput$majorAlleleFrequencyDifference) > 0.2
+  
+  significantResults <- list(geneOutput = results$geneOutput[ASEindexes, ], 
+                             locusOutput = results$locusOutput[ASEindexes, ])
+  return(significantResults)
+}
+```
+
+Combine all the MBASED results into one file, since we subsetted the data earlier to run it in parallel.  
+This chunk does not need to be run again.  
+```{r Combine all the files into one, include = FALSE}
+rm(list=ls())
+
+# filenames <- list.files("MBASED/Results_Beta/414vs415", pattern="*.Rdata", full.names=TRUE)
+filenames <- list.files("MBASED/Results_Beta/415vs414", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("MBASED/Results_Binom/414vs415", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("MBASED/Results_Binom/415vs414", pattern="*.Rdata", full.names=TRUE)
+
+for(i in 1:length(filenames)) {
+  load(filenames[i])
+}
+
+rm(i)
+rm(filenames)
+datanames <- ls()
+
+final <- do.call(rbind, mget(datanames))
+
+compiledMetadata <- metadata(final)[[1]]
+for(i in 2:length(metadata(final))) {
+  compiledMetadata <- rbind(compiledMetadata, metadata(final)[[i]])
+}
+
+metadata(final) <- list(locusSpecificResults= compiledMetadata)
+
+# final414vs415b <- final
+final415vs414b <- final
+# final414vs415 <- final
+# final415vs414 <- final
+
+# save(final414vs415b, file = "MBASED/Results_Beta/final414vs415b.Rdata")
+save(final415vs414b, file = "MBASED/Results_Beta/final415vs414b.Rdata")
+# save(final414vs415, file = "MBASED/Results_Binom/final414vs415.Rdata")
+# save(final415vs414, file = "MBASED/Results_Binom/final415vs414.Rdata")
+```
+
+## Analysis
+
+Loading my results
+```{r Analysis and summary}
+load("~/repos/KIAT_F1/MBASED_Results_Beta/final414vs415b.Rdata")
+load("~/repos/KIAT_F1/MBASED_Results_Beta/final415vs414b.Rdata") 
+load("~/repos/KIAT_F1/MBASED_Results_Binom/final414vs415.Rdata") 
+load("~/repos/KIAT_F1/MBASED_Results_Binom/final415vs414.Rdata") 
+
+# class(results$geneOutput) # data.frame containing: GeneID, MAF Difference, p-value, and p-value for heterogenous slicing
+# class(results$locusOutput) # GRangesList containing all SNVs, organized by gene
+
+significant <- ExtractASE(final414vs415)
+significantRev <- ExtractASE(final415vs414)
+significantb <- ExtractASE(final414vs415b)
+significantRevb <- ExtractASE(final415vs414b)
+
+dim(significant$geneOutput) # 607 genes found in ASE using F1 414 as sample 1 and a binomial model
+dim(significantRev$geneOutput) # 603 genes
+dim(significantb$geneOutput) #88 genes found in ASE using F1 414 as sample 1
+dim(significantRevb$geneOutput) #94 genes found in ASE using F1 415 as sample 2
+
+genes <- rownames(significant$geneOutput) # Names of the genes 
+genesRev <- rownames(significantRev$geneOutput) 
+genesb <- rownames(significantb$geneOutput)
+genesRevb <- rownames(significantRevb$geneOutput)
+
+matches <- intersect(genesb, genesRevb) # 86 genes in agreement
+differences414 <- setdiff(genesb, genesRevb) # 2 genes unique when 414 is the first sample
+differences415 <- setdiff(genesRevb, genesb) # 8 genes unique when 415 is the first sample
+
+aseGenesBinom <- union(genes, genesRev) # All the genes 
+aseGenesBeta <- union(genesb, genesRevb) # All the genes 
+matchesBetweenBetaAndBinomial <- intersect(total, totalb)
+
+save(aseGenesBeta, file = "MBASED/aseGenesBeta.Rdata")
+save(aseGenesBinom, file = "MBASED/aseGenesBinom.Rdata")
+```

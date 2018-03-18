@@ -1,0 +1,54 @@
+---
+title: "F2 SNPs"
+author: "Lynn Ly"
+date: "3/16/2018"
+output: html_document
+---
+
+```{r}
+library(ggplot2)
+library(vcfR)
+```
+
+# Function for extracting relevant elements from a tidy vcf
+```{r}
+vcfTidy2ASE <- function(vcfTidy, finalCalls) {
+  fix <- vcfTidy$fix[, c("ChromKey", "CHROM", "POS", "REF", "ALT")] 
+  gt <- vcfTidy$gt[, c("ChromKey", "POS", "Indiv", "gt_GT", "gt_DP", "gt_RO", "gt_AO")]
+  factors <- c("Indiv", "gt_GT")
+  gt[factors] <- lapply(gt[factors], factor)
+  gt$gt_AO <- as.integer(gt$gt_AO)
+  
+  # Filtering for specific SNVs
+  finalCalls <- left_join(finalCalls[, c(1, 2, 5, 6)], vcfTidy$fix[, 1:3], by = c("CHROM", "POS"))
+  fix <- inner_join(fix, finalCalls, by = c("ChromKey", "POS", "CHROM"))
+  gt <- semi_join(gt, finalCalls, by = c("ChromKey", "POS"))
+  counts <- inner_join(fix, gt, by = c("ChromKey", "POS"))
+  
+  ASE <- counts %>% mutate(
+    gt_RR = gt_RO / gt_DP,
+    gt_AR = gt_AO / gt_DP
+  )
+  
+  colnames(ASE)[6:13] <- c("Ae", "Ol", "Indiv", "GT", "DP", "RO", "AO", "RR", "AR")
+  
+  return(ASE)
+}
+```
+
+# Convert our VCF file into a tidy df for downstream analysis  
+The input VCF contained extra loci. It was filtered to only include loci in F2_Final_SNP_Calls.  
+```{r}
+vcf <- read.vcfR("F2/F2_filtered.vcf")  
+
+info_fields <- c("DP")
+format_fields <- c("GT", "DP", "RO", "AO")
+vcfTidy <- vcfR2tidy(vcf, info_fields = info_fields, format_fields = format_fields)
+
+save(vcfTidy, file = "F2/tidy_vcf/vcfTidy.Rdata")
+
+finalCalls <- read.table("F2/input/F2_Final_SNP_Calls", header = TRUE)
+
+F2ASERatios <- vcfTidy2ASE(vcfTidy, finalCalls)
+save(F2ASERatios, file = "F2/tidy_vcf/F2ASERatios.Rdata")
+```
