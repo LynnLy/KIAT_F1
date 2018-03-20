@@ -10,7 +10,7 @@ library(ggplot2)
 library(vcfR)
 ```
 
-# Function for extracting relevant elements from a tidy vcf
+### Function for extracting relevant elements from a tidy vcf
 ```{r}
 vcfTidy2ASE <- function(vcfTidy, finalCalls) {
   fix <- vcfTidy$fix[, c("ChromKey", "CHROM", "POS", "REF", "ALT")] 
@@ -36,19 +36,34 @@ vcfTidy2ASE <- function(vcfTidy, finalCalls) {
 }
 ```
 
-# Convert our VCF file into a tidy df for downstream analysis  
+### Convert our VCF file into a tidy df for downstream analysis  
 The input VCF contained extra loci. It was filtered to only include loci in F2_Final_SNP_Calls.  
 ```{r}
-vcf <- read.vcfR("F2/F2_filtered.vcf")  
+vcf <- read.vcfR("input/F2_filtered.vcf")  
 
 info_fields <- c("DP")
 format_fields <- c("GT", "DP", "RO", "AO")
 vcfTidy <- vcfR2tidy(vcf, info_fields = info_fields, format_fields = format_fields)
 
-save(vcfTidy, file = "F2/tidy_vcf/vcfTidy.Rdata")
+save(vcfTidy, file = "tidy_vcf/vcfTidy.Rdata")
 
-finalCalls <- read.table("F2/input/F2_Final_SNP_Calls", header = TRUE)
+finalCalls <- read.table("input/F2_Final_SNP_Calls", header = TRUE)
 
-F2ASERatios <- vcfTidy2ASE(vcfTidy, finalCalls)
-save(F2ASERatios, file = "F2/tidy_vcf/F2ASERatios.Rdata")
+aseRatiosF2 <- vcfTidy2ASE(vcfTidy, finalCalls)
+save(aseRatiosF2, file = "tidy_vcf/aseRatiosF2.Rdata")
 ```
+
+## Filtering 
+Only include SNVs where the individual is heterozygous.
+Also, only include SNVs from genes previously determined to be in ase, from the F1414 population.
+```{r}
+load("tidy_vcf/aseRatiosF2.Rdata")
+load("../MBASED/aseGenes414.Rdata") # Genes determined to be in ASE
+
+summary(aseRatiosF2$GT) # 1246299 are heterozygous
+
+aseRatiosF2 <- aseRatiosF2 %>% filter(GT == "0/1")
+
+
+```
+
