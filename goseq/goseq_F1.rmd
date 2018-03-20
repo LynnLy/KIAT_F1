@@ -33,7 +33,7 @@ BngoList <- tapply(as.character(Bngo$V2), Bngo$V1, c)
 head(BngoList)
 save(BngoList, file = "BngoList.Rdata")
 
-load("MBASED/phasedData.Rdata")
+load("../MBASED/phasedData.Rdata")
 genesWithSNVs <- ExtractGenes(phasedData)
 BngoList_subset <- BngoList[which(rownames(BngoList) %in% genesWithSNVs)]
 save(BngoList_subset, file = "BngoList_subset.Rdata")

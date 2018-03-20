@@ -336,7 +336,7 @@ for(i in 38000:nrow(phasedData)) {
 
 phasedData$newGene <- newGene
 
-save(phasedData, file = "MBASED/phasedData.Rdata")
+save(phasedData, file = "phasedData.Rdata")
 ```
 
 The data is now prepared to be used in **Run_MBASED.R** and **Run_MBASED_Beta.R**

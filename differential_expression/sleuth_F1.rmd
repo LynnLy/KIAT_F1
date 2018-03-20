@@ -18,15 +18,15 @@ library(sleuth)
 
 The kallisto results were generated using **kallisto_F1.sh**.
 ```{r}
-sample_id <- dir(file.path("kallisto/results"))
+sample_id <- dir(file.path("../kallisto/results"))
 
-kal_dirs <- file.path("kallisto/results", sample_id, "kallisto")
+kal_dirs <- file.path("../kallisto/results", sample_id, "kallisto")
 kal_dirs
 ```
 
 Get the metadata from our experiment summary table and add a new column, path, leading to the kallisto directories.  
 ```{r}
-metadata <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
+metadata <- read.csv(file.path("../F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
 metadata <- metadata[1:6, ]# young tissue only
 metadata <- dplyr::mutate(metadata, path = kal_dirs)
 metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path)
@@ -107,18 +107,18 @@ To check for enrichment of ASE in DE genes, we need to rerun the analysis using 
 To do this, we have to use `subset_kallisto_custom()` and a modified `write_kallisto_hdf5()` to subset our data. 
 
 ```{r}
-load("phasedData.Rdata")
+load("../MBASED/phasedData.Rdata")
 geneIDs <- as.character(unique(phasedData$GeneID))
 
-sample_id <- dir(file.path("kallisto/results"))
+sample_id <- dir(file.path("../kallisto/results"))
 
-kal_dirs_subset <- file.path("kallisto/results_subset", sample_id, "kallisto")
+kal_dirs_subset <- file.path("../kallisto/results_subset", sample_id, "kallisto")
 kal_dirs_subset
 ```
 
 Only need to run this once: Subset the kallisto objects. 
 ```{r, eval = FALSE}
-source("kallisto/subset_kallisto.R")
+source("../kallisto/subset_kallisto.R")
 
 LoadModifyWrite <- function(kal_dir) {
   # First, load kallisto object. Then, subset kallisto object. Then, write new, subsetted version to the original location
@@ -133,7 +133,7 @@ lapply(kal_dirs_subset, LoadModifyWrite)
 ## New sleuth object
 
 ```{r, eval = FALSE}
-metadata <- read.csv(file.path("F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
+metadata <- read.csv(file.path("../F1_summary.csv"), header = TRUE, stringsAsFactors=FALSE)
 metadata <- metadata[1:6, ]# young tissue only
 metadata <- dplyr::mutate(metadata, path = kal_dirs_subset)
 metadata <- dplyr::select(metadata[1:6, ], sample = Sample.ID, cultivar, path)

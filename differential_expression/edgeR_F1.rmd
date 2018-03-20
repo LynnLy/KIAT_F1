@@ -12,11 +12,11 @@ library(tidyverse)
 
 Set up 
 ```{r}
-reads <- read.table("read.count.tsv", header = TRUE)
+reads <- read.table("../read.count.tsv", header = TRUE)
 rownames(reads) <- reads$ID
 reads <- reads[, -1]
 
-metadata <- read.csv("F1_summary.csv")
+metadata <- read.csv("../F1_summary.csv")
 metadata <- metadata[order(metadata$Sample.ID),]
 
 metadata[,5:8]
@@ -25,15 +25,15 @@ sampleIDs
 
 colnames(reads) <- sampleIDs
 head(reads)
-save(reads, file="differential_expression/edgeRReads.Rdata")
+save(reads, file="edgeRReads.Rdata")
 ```
 
 ### Filtering
 
 In this edgeR rerun, we only want to include genes that have SNVs in them.
 ```{r}
-load("differential_expression/edgeRReads.Rdata")
-load("MBASED/phasedData.Rdata") # This is the annotated data from MBASED analysis. It has already gone through SNP calling 
+load("edgeRReads.Rdata")
+load("../MBASED/phasedData.Rdata") # This is the annotated data from MBASED analysis. It has already gone through SNP calling 
 
 geneIDs <- as.character(unique(phasedData$GeneID))
 
@@ -48,7 +48,7 @@ save(reads_subset, file = "differential_expression/edgeRReadsSubset.Rdata")
 
 Creating and normalizing dgList
 ```{r}
-load("differential_expression/edgeRReadsSubset.Rdata")
+load("edgeRReadsSubset.Rdata")
 
 metadata$group <- paste(metadata$cultivar, metadata$Stage, sep = "_")
 
@@ -89,7 +89,7 @@ summary(youngDE) # 668 downreg, 9849 neither, 764 upreg
 # A sorted list of all the significant DE genes
 edgeRResultsYoung_subset <- topTags(youngLRT,n = Inf)$table[topTags(youngLRT,n = Inf)$table$FDR<0.05,]
 
-save(edgeRResultsYoung_subset, file = "differential_expression/edgeRResultsYoung_subset.Rdata")
+save(edgeRResultsYoung_subset, file = "edgeRResultsYoung_subset.Rdata")
 ```
 
 
