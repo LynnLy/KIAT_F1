@@ -26,20 +26,41 @@ SummarizeASEResults_2s <- function(MBASEDOutput) {
   return(list(geneOutput=geneOutputDF, locusOutput=lociOutputList))
 }
 
-ExtractASE <- function(MBASEDOutput) {
-  # Extract only desired genes
-  # Modify ASEindexes to vary the strictness of selection.
+SummarizeASEResults_1s <- function(MBASEDOutput) {
+  # Same as above, but for single sample results
+  geneOutputDF <- data.frame(
+    majorAlleleFrequency = assays(MBASEDOutput)$majorAlleleFrequency[,1],
+    pValueASE=assays(MBASEDOutput)$pValueASE[,1],
+    pValueHeterogeneity=assays(MBASEDOutput)$pValueHeterogeneity[,1]
+  )
   
-  results <- SummarizeASEResults_2s(MBASEDOutput)
+  lociOutputGR <- rowRanges(metadata(MBASEDOutput)$locusSpecificResults)
+  lociOutputGR$allele1IsMajor <- assays(metadata(MBASEDOutput)$locusSpecificResults)$allele1IsMajor[,1]
+
+  lociOutputGR$MAF <- assays(metadata(MBASEDOutput)$locusSpecificResults)$MAF[,1]
+  lociOutputList <- split(lociOutputGR, factor(lociOutputGR$aseID, levels=unique(lociOutputGR$aseID)))
+  return(list(geneOutput=geneOutputDF, locusOutput=lociOutputList))
+}
+
+ExtractASE <- function(MBASEDSummary, samples = 1, p = 0.05, MAFD = 0.2) {
+  # Extract only desired genes
+  # p = p-value cutoff, MAFD = major allele frequency difference cutoff,
+  # Modify p and MAFD to vary the strictness of selection.
 
   # Apply Benjamini-Hochberg (fdr) correction for multiple testing
-  adjustedP <- p.adjust(results$geneOutput$pValueASE, method = "BH", n = length(results$geneOutput$pValueASE))
+  adjustedP <- p.adjust(MBASEDSummary$geneOutput$pValueASE, method = "BH", n = length(MBASEDSummary$geneOutput$pValueASE))
   
-  ASEindexes <- adjustedP < 0.05 & 
-    abs(results$geneOutput$majorAlleleFrequencyDifference) > 0.2
+  if(samples == 2) {
+  ASEindexes <- adjustedP < p & 
+    abs(MBASEDSummary$geneOutput$majorAlleleFrequencyDifference) > MAFD
+  } else {
+    ASEindexes <- adjustedP < p & 
+    (abs(MBASEDSummary$geneOutput$majorAlleleFrequency) > 0.5 + MAFD |
+    abs(MBASEDSummary$geneOutput$majorAlleleFrequency) < 0.5 - MAFD)
+  }
   
-  significantResults <- list(geneOutput = results$geneOutput[ASEindexes, ], 
-                             locusOutput = results$locusOutput[ASEindexes, ])
+  significantResults <- list(geneOutput = MBASEDSummary$geneOutput[ASEindexes, ], 
+                             locusOutput = MBASEDSummary$locusOutput[ASEindexes, ])
   return(significantResults)
 }
 ```
@@ -49,10 +70,10 @@ This chunk does not need to be run again.
 ```{r Combine all the files into one, include = FALSE}
 rm(list=ls())
 
-# filenames <- list.files("MBASED/Results_Beta/414vs415", pattern="*.Rdata", full.names=TRUE)
-filenames <- list.files("MBASED/Results_Beta/415vs414", pattern="*.Rdata", full.names=TRUE)
-# filenames <- list.files("MBASED/Results_Binom/414vs415", pattern="*.Rdata", full.names=TRUE)
-# filenames <- list.files("MBASED/Results_Binom/415vs414", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("Results_Beta/414vs415", pattern="*.Rdata", full.names=TRUE)
+filenames <- list.files("Results_Beta/415vs414", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("Results_Binom/414vs415", pattern="*.Rdata", full.names=TRUE)
+# filenames <- list.files("Results_Binom/415vs414", pattern="*.Rdata", full.names=TRUE)
 
 for(i in 1:length(filenames)) {
   load(filenames[i])
@@ -76,28 +97,28 @@ final415vs414b <- final
 # final414vs415 <- final
 # final415vs414 <- final
 
-# save(final414vs415b, file = "MBASED/Results_Beta/final414vs415b.Rdata")
-save(final415vs414b, file = "MBASED/Results_Beta/final415vs414b.Rdata")
-# save(final414vs415, file = "MBASED/Results_Binom/final414vs415.Rdata")
-# save(final415vs414, file = "MBASED/Results_Binom/final415vs414.Rdata")
+# save(final414vs415b, file = "Results_Beta/final414vs415b.Rdata")
+save(final415vs414b, file = "Results_Beta/final415vs414b.Rdata")
+# save(final414vs415, file = "Results_Binom/final414vs415.Rdata")
+# save(final415vs414, file = "Results_Binom/final415vs414.Rdata")
 ```
 
 ## Analysis
 
 Loading my results
 ```{r Analysis and summary}
-load("~/repos/KIAT_F1/MBASED_Results_Beta/final414vs415b.Rdata")
-load("~/repos/KIAT_F1/MBASED_Results_Beta/final415vs414b.Rdata") 
-load("~/repos/KIAT_F1/MBASED_Results_Binom/final414vs415.Rdata") 
-load("~/repos/KIAT_F1/MBASED_Results_Binom/final415vs414.Rdata") 
+load("~/repos/KIAT_F1/MBASED/Results_Beta/final414vs415b.Rdata")
+load("~/repos/KIAT_F1/MBASED/Results_Beta/final415vs414b.Rdata") 
+load("~/repos/KIAT_F1/MBASED/Results_Binom/final414vs415.Rdata") 
+load("~/repos/KIAT_F1/MBASED/Results_Binom/final415vs414.Rdata") 
 
 # class(results$geneOutput) # data.frame containing: GeneID, MAF Difference, p-value, and p-value for heterogenous slicing
 # class(results$locusOutput) # GRangesList containing all SNVs, organized by gene
 
-significant <- ExtractASE(final414vs415)
-significantRev <- ExtractASE(final415vs414)
-significantb <- ExtractASE(final414vs415b)
-significantRevb <- ExtractASE(final415vs414b)
+significant <- final414vs415 %>% SummarizeASEResults_2s() %>% ExtractASE()
+significantRev <- final415vs414 %>% SummarizeASEResults_2s() %>% ExtractASE()
+significantb <- final414vs415b %>% SummarizeASEResults_2s() %>% ExtractASE()
+significantRevb <- final415vs414b %>% SummarizeASEResults_2s() %>% ExtractASE()
 
 dim(significant$geneOutput) # 607 genes found in ASE using F1 414 as sample 1 and a binomial model
 dim(significantRev$geneOutput) # 603 genes
@@ -117,6 +138,18 @@ aseGenesBinom <- union(genes, genesRev) # All the genes
 aseGenesBeta <- union(genesb, genesRevb) # All the genes 
 matchesBetweenBetaAndBinomial <- intersect(total, totalb)
 
-save(aseGenesBeta, file = "MBASED/aseGenesBeta.Rdata")
-save(aseGenesBinom, file = "MBASED/aseGenesBinom.Rdata")
+save(aseGenesBeta, file = "aseGenesBeta.Rdata")
+save(aseGenesBinom, file = "aseGenesBinom.Rdata")
 ```
+
+### One Sample Analysis
+```{r}
+load("~/repos/KIAT_F1/MBASED/Results_F1414/BETA.MBASED.F1.414.Rdata")
+
+significant <- BETA.MBASED.F1.414 %>% SummarizeASEResults_1s() %>% ExtractASE()
+dim(significant$geneOutput)
+aseGenes414 <- rownames(significant$geneOutput)
+
+save(aseGenes414, file = "aseGenes414.Rdata")
+```
+
