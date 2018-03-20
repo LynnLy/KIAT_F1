@@ -5,6 +5,9 @@ date: "3/16/2018"
 output: html_document
 ---
 
+Inputs: A VCF file (input/F2_filtered/vcf) and filtering criteria (input/F2_Final_SNP_Calls, ../MBASED/aseGenes414)
+Outputs: A tidy VCF file, filtered. Includes heterozygous SNVs associated with genes in ASE. (tidy_vcf/aseRatiosF2)
+
 ```{r}
 library(ggplot2)
 library(vcfR)
@@ -12,15 +15,15 @@ library(vcfR)
 
 ### Function for extracting relevant elements from a tidy vcf
 ```{r}
-vcfTidy2ASE <- function(vcfTidy, finalCalls) {
-  fix <- vcfTidy$fix[, c("ChromKey", "CHROM", "POS", "REF", "ALT")] 
-  gt <- vcfTidy$gt[, c("ChromKey", "POS", "Indiv", "gt_GT", "gt_DP", "gt_RO", "gt_AO")]
+tidyVCF2ASE <- function(tidyVCF, finalCalls) {
+  fix <- tidyVCF$fix[, c("ChromKey", "CHROM", "POS", "REF", "ALT")] 
+  gt <- tidyVCF$gt[, c("ChromKey", "POS", "Indiv", "gt_GT", "gt_DP", "gt_RO", "gt_AO")]
   factors <- c("Indiv", "gt_GT")
   gt[factors] <- lapply(gt[factors], factor)
   gt$gt_AO <- as.integer(gt$gt_AO)
   
   # Filtering for specific SNVs
-  finalCalls <- left_join(finalCalls[, c(1, 2, 5, 6)], vcfTidy$fix[, 1:3], by = c("CHROM", "POS"))
+  finalCalls <- left_join(finalCalls[, c(1, 2, 5, 6)], tidyVCF$fix[, 1:3], by = c("CHROM", "POS"))
   fix <- inner_join(fix, finalCalls, by = c("ChromKey", "POS", "CHROM"))
   gt <- semi_join(gt, finalCalls, by = c("ChromKey", "POS"))
   counts <- inner_join(fix, gt, by = c("ChromKey", "POS"))
@@ -43,27 +46,34 @@ vcf <- read.vcfR("input/F2_filtered.vcf")
 
 info_fields <- c("DP")
 format_fields <- c("GT", "DP", "RO", "AO")
-vcfTidy <- vcfR2tidy(vcf, info_fields = info_fields, format_fields = format_fields)
+tidyVCF <- vcfR2tidy(vcf, info_fields = info_fields, format_fields = format_fields)
 
-save(vcfTidy, file = "tidy_vcf/vcfTidy.Rdata")
+save(tidyVCF, file = "tidy_vcf/tidyVCF.Rdata")
 
 finalCalls <- read.table("input/F2_Final_SNP_Calls", header = TRUE)
 
-aseRatiosF2 <- vcfTidy2ASE(vcfTidy, finalCalls)
-save(aseRatiosF2, file = "tidy_vcf/aseRatiosF2.Rdata")
+aseRatiosF2_full <- tidyVCF2ASE(tidyVCF, finalCalls)
+save(aseRatiosF2_full, file = "tidy_vcf/aseRatiosF2_full.Rdata")
 ```
 
 ## Filtering 
 Only include SNVs where the individual is heterozygous.
+```{r}
+load("tidy_vcf/aseRatiosF2_full.Rdata")
+
+summary(aseRatiosF2_full$GT) # 1246299 are heterozygous
+
+aseRatiosF2 <- aseRatiosF2_full %>% filter(GT == "0/1")
+```
+
 Also, only include SNVs from genes previously determined to be in ase, from the F1414 population.
 ```{r}
-load("tidy_vcf/aseRatiosF2.Rdata")
 load("../MBASED/aseGenes414.Rdata") # Genes determined to be in ASE
+load("../MBASED/phasedData.Rdata")
 
-summary(aseRatiosF2$GT) # 1246299 are heterozygous
+phasedData_filtered <- phasedData %>% filter(GeneID %in% aseGenes414)
+aseRatiosF2 <- aseRatiosF2 %>% semi_join(phasedData_filtered, by = c("CHROM", "POS"))
 
-aseRatiosF2 <- aseRatiosF2 %>% filter(GT == "0/1")
-
-
+save(aseRatiosF2, file = "tidy_vcf/aseRatiosF2.Rdata")
 ```
 
