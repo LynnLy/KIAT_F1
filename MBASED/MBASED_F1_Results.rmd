@@ -6,6 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 library(MBASED)
 library(tidyverse)
+library(magrittr)
 ```
 
 Helper Functions for summarizing results and getting significant ones
@@ -42,13 +43,21 @@ SummarizeASEResults_1s <- function(MBASEDOutput) {
   return(list(geneOutput=geneOutputDF, locusOutput=lociOutputList))
 }
 
-ExtractASE <- function(MBASEDSummary, samples = 1, p = 0.05, MAFD = 0.2) {
+ExtractASE <- function(MBASEDSummary, samples = 1, p = 0.05, MAFD = 0.2, heterogeneity = FALSE) {
   # Extract only desired genes
   # p = p-value cutoff, MAFD = major allele frequency difference cutoff,
   # Modify p and MAFD to vary the strictness of selection.
 
   # Apply Benjamini-Hochberg (fdr) correction for multiple testing
-  adjustedP <- p.adjust(MBASEDSummary$geneOutput$pValueASE, method = "BH", n = length(MBASEDSummary$geneOutput$pValueASE))
+  if(heterogeneity == TRUE) {
+    MBASEDSummary$geneOutput %<>% mutate(pValueHeterogeneity = ifelse(is.na(pValueHeterogeneity),
+                                                                      1, pValueHeterogeneity))
+    adjustedP <- p.adjust(MBASEDSummary$geneOutput$pValueHeterogeneity, method = "BH",
+                          n = length(MBASEDSummary$geneOutput$pValueASE))
+  } else {
+    adjustedP <- p.adjust(MBASEDSummary$geneOutput$pValueASE, method = "BH", 
+                          n = length(MBASEDSummary$geneOutput$pValueASE))
+  }
   
   if(samples == 2) {
   ASEindexes <- adjustedP < p & 
@@ -115,10 +124,10 @@ load("~/repos/KIAT_F1/MBASED/Results_Binom/final415vs414.Rdata")
 # class(results$geneOutput) # data.frame containing: GeneID, MAF Difference, p-value, and p-value for heterogenous slicing
 # class(results$locusOutput) # GRangesList containing all SNVs, organized by gene
 
-significant <- final414vs415 %>% SummarizeASEResults_2s() %>% ExtractASE()
-significantRev <- final415vs414 %>% SummarizeASEResults_2s() %>% ExtractASE()
-significantb <- final414vs415b %>% SummarizeASEResults_2s() %>% ExtractASE()
-significantRevb <- final415vs414b %>% SummarizeASEResults_2s() %>% ExtractASE()
+significant <- final414vs415 %>% SummarizeASEResults_2s() %>% ExtractASE(samples = 2)
+significantRev <- final415vs414 %>% SummarizeASEResults_2s() %>% ExtractASE(samples = 2)
+significantb <- final414vs415b %>% SummarizeASEResults_2s() %>% ExtractASE(samples = 2)
+significantRevb <- final415vs414b %>% SummarizeASEResults_2s() %>% ExtractASE(samples = 2)
 
 dim(significant$geneOutput) # 607 genes found in ASE using F1 414 as sample 1 and a binomial model
 dim(significantRev$geneOutput) # 603 genes
@@ -153,3 +162,13 @@ aseGenes414 <- rownames(significant$geneOutput)
 save(aseGenes414, file = "aseGenes414.Rdata")
 ```
 
+Distribution of p-values for heterogeneity
+```{r}
+summaryASE <- BETA.MBASED.F1.414 %>% SummarizeASEResults_1s()
+
+p.adjust(summaryASE$geneOutput$pValueHeterogeneity) %>% reshape2::melt() %>% filter(value < 1) %>%
+  ggplot() + geom_histogram(aes(x = value))
+
+significant <- summaryASE %>% ExtractASE(heterogeneity = TRUE)
+```
+Only 3 genes showed both ASE and heterogeneity. 
