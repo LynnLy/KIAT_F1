@@ -1,0 +1,70 @@
+---
+title: "aseQTL subset"
+author: "Lynn Ly"
+date: "3/21/2018"
+output: html_document
+---
+
+I have 18222 loci with informative SNVs for potential aseQTL analysis. Looking at that will be computationally expensive, so this is for preliminary aseQTL on a random subset, using only 100 SNVs.  
+
+Quality control section is excluded, since that was performed on the whole dataset. 
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(qtl)
+library(snow)
+```
+
+### Prep
+Subset 100 SNVs
+```{r}
+aseRatiosF2_wide <- read.csv(file = "../input/aseRatiosF2_wide.csv")
+
+set.seed(1024)
+aseRatiosF2_subset <- sample_n(aseRatiosF2_wide, size = 100)
+
+write.csv(aseRatiosF2_subset, file = "../input/aseRatiosF2_subset.csv", row.names = FALSE)
+```
+
+Read in data from the marker file (genetic map) and my phenotypes (the ASE ratios) 
+```{r}
+data.qtl <- read.cross(format = "csvsr", 
+                       genfile = "../input/LG.f2.madmapper.final_gen_revised.csv", 
+                       phefile = "../input/aseRatiosF2_subset.csv",
+                       genotypes = c("AA", "AB", "BB")
+                       )
+```
+
+### QTL on Subset
+
+Create imputations and calculate the conditional genotype probabilities
+```{r}
+data.qtl <- sim.geno(data.qtl, step = 1, n.draws = 32) # imputation?  
+data.qtl <- calc.genoprob(data.qtl, step=1) 
+```
+
+(example) scan one via multiple imputation method
+```{r}
+out.imp <- scanone(data.qtl, pheno.col = 2:ncol(data.qtl$pheno),
+                   method = "imp", use = "all.obs") 
+```
+
+### Significance Thresholds
+How large of a LOD score do you need to call it as significant? Null hypothesis is derived from permutation tests: permute the phenotypes relative to the genotype data. Then, the QTL mapping method is applied to the shuffled version to obtain a set of LOD curves. The genome-wide maximum LOD score is derived from these curves. 
+
+```{r}
+operm <- scanone(data.qtl, pheno.col = 2:ncol(data.qtl$pheno), method = "imp",
+                 use = "all.obs", n.perm = 1000, n.cluster = 8)
+
+summary(operms, alpha = c(0.20, 0.05)) # gives the LOD thresholds for 80% and 95% confidence intervals
+
+summary(out.imp, perms = operms, alpha = 0.05) # picks out the LOD peaks that meet 5% significance level
+
+save(data.qtl, out.imp, operms, file = "results/scanone_aseQTL_subset.Rdata")
+```
+
+```{r}
+load("results/scanone_aseQTL_subset.Rdata")
+
+```
+
