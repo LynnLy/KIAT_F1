@@ -33,7 +33,7 @@ tidyVCF2ASE <- function(tidyVCF, finalCalls) {
     gt_AR = gt_AO / gt_DP
   )
   
-  colnames(ASE)[6:13] <- c("Ae", "Ol", "Indiv", "GT", "DP", "RO", "AO", "RR", "AR")
+  colnames(ASE)[6:14] <- c("Ae", "Ol", "Indiv", "GT", "DP", "RO", "AO", "RR", "AR")
   
   return(ASE)
 }
@@ -56,11 +56,46 @@ aseRatiosF2_full <- tidyVCF2ASE(tidyVCF, finalCalls)
 save(aseRatiosF2_full, file = "tidy_vcf/aseRatiosF2_full.Rdata")
 ```
 
-## Filtering 
-Only include SNVs where the individual is heterozygous.
+```{r}
+swapRefAlt <- function(inputVCF, condition = Ae == "1/1") {
+  condition_enq <- enquo(condition)
+  inputVCF.Ae <- inputVCF %>% filter(!!condition_enq) 
+  inputVCF.Ol <- inputVCF %>% filter(!(!!condition_enq))
+
+  inputVCF.Ol$oldGT <- inputVCF.Ol$GT
+  inputVCF.Ol <- inputVCF.Ol %>% mutate(
+    GT = case_when(
+      oldGT == "1/1" ~ "0/0",
+      oldGT == "0/0" ~ "1/1",
+      TRUE           ~ as.character(oldGT)
+    )
+  ) %>% dplyr::select(-oldGT)
+  
+  inputVCF.Ol <- rename(inputVCF.Ol, 
+                REF = "ALT", RO = "AO", RR = "AR", Ae = "Ol",
+                ALT = "REF", AO = "RO", AR = "RR", Ol = "Ae")
+  
+  phasedData.unordered <- rbind(inputVCF.Ae, inputVCF.Ol)
+  phasedData <- arrange(phasedData.unordered, CHROM, POS, Indiv)
+  
+  return(phasedData)
+}
+```
+
+Make Ae alleles the reference allele
 ```{r}
 load("tidy_vcf/aseRatiosF2_full.Rdata")
 
+# aseRatiosF2_full <- aseRatiosF2_full[order(aseRatiosF2_full$CHROM, aseRatiosF2_full$POS, aseRatiosF2_full$Indiv), ]
+# head(aseRatiosF2_full)
+aseRatiosF2_full <- swapRefAlt(aseRatiosF2_full)
+head(aseRatiosF2_full)
+
+```
+
+## Filtering 
+Only include SNVs where the individual is heterozygous.
+```{r}
 summary(aseRatiosF2_full$GT) # 1246299 are heterozygous
 
 aseRatiosF2 <- aseRatiosF2_full %>% filter(GT == "0/1")

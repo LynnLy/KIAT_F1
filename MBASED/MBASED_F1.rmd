@@ -317,10 +317,7 @@ colnames(inputVCF.Ol)[17:24] <- c("Ae_AO", "Ol_AO", "F1_414_AO", "F1_415_AO",
                                   "Ae_RO", "Ol_RO", "F1_414_RO", "F1_415_RO")
 
 phasedData.unordered <- rbind(inputVCF.Ae, inputVCF.Ol)
-
-attach(phasedData.unordered)
-phasedData <- phasedData.unordered[order(CHROM, POS), ]
-detach(phasedData.unordered)
+phasedData <- phasedData.unordered %>% arrange(CHROM, POS)
 
 newGene <- rep(NA, nrow(phasedData))
 for(i in 38000:nrow(phasedData)) {
