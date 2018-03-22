@@ -99,16 +99,15 @@ Only include SNVs where the individual is heterozygous.
 summary(aseRatiosF2_full$GT) # 1246299 are heterozygous
 
 aseRatiosF2 <- aseRatiosF2_full %>% filter(GT == "0/1")
+save(aseRatiosF2, file = "tidy_vcf/aseRatiosF2.Rdata")
 ```
 
-Also, only include SNVs from genes previously determined to be in ase, from the F1414 population.
+CANCELED: Also, only include SNVs from genes previously determined to be in ase, from the F1414 population.
 ```{r}
 load("../MBASED/aseGenes414.Rdata") # Genes determined to be in ASE
 load("../MBASED/phasedData.Rdata")
 
 phasedData_filtered <- phasedData %>% filter(GeneID %in% aseGenes414)
-aseRatiosF2 <- aseRatiosF2 %>% semi_join(phasedData_filtered, by = c("CHROM", "POS"))
-
-save(aseRatiosF2, file = "tidy_vcf/aseRatiosF2.Rdata")
+aseRatiosF2_filtered <- aseRatiosF2 %>% semi_join(phasedData_filtered, by = c("CHROM", "POS"))
 ```
 
