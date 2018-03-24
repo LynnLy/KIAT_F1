@@ -54,9 +54,11 @@ ExtractASE <- function(MBASEDSummary, samples = 1, p = 0.05, MAFD = 0.2, heterog
                                                                       1, pValueHeterogeneity))
     adjustedP <- p.adjust(MBASEDSummary$geneOutput$pValueHeterogeneity, method = "BH",
                           n = length(MBASEDSummary$geneOutput$pValueASE))
+    MBASEDSummary$geneOutput$pValueHeterogeneity <- adjustedP
   } else {
     adjustedP <- p.adjust(MBASEDSummary$geneOutput$pValueASE, method = "BH", 
                           n = length(MBASEDSummary$geneOutput$pValueASE))
+    MBASEDSummary$geneOutput$pValueASE <-  adjustedP
   }
   
   if(samples == 2) {
@@ -128,6 +130,8 @@ significant <- final414vs415 %>% SummarizeASEResults_2s() %>% ExtractASE(samples
 significantRev <- final415vs414 %>% SummarizeASEResults_2s() %>% ExtractASE(samples = 2)
 significantb <- final414vs415b %>% SummarizeASEResults_2s() %>% ExtractASE(samples = 2)
 significantRevb <- final415vs414b %>% SummarizeASEResults_2s() %>% ExtractASE(samples = 2)
+
+save(significantb, file = "Results_Beta/significantb.Rdata")
 
 dim(significant$geneOutput) # 607 genes found in ASE using F1 414 as sample 1 and a binomial model
 dim(significantRev$geneOutput) # 603 genes
