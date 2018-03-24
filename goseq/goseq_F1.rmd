@@ -85,6 +85,7 @@ MF <- GOseq.Bn.ORA(genelist, gene2cat = BngoList, ontology = "MF")
 
 ```{r}
 load("BngoList_subset.Rdata")
+load("../MBASED/aseGenesBeta.Rdata")
 genelist <- aseGenesBeta
 genelist <- aseGenesBinom
 BP <- GOseq.Bn.ORA(genelist, gene2cat = BngoList_subset, ontology = "BP")
