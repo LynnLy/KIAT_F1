@@ -1,0 +1,124 @@
+---
+title: "Standard ASE Analysis"
+author: "Lynn Ly"
+date: "3/23/2018"
+output: html_document
+---
+
+**Part 1: Parental Bias** Takes the genes determined have differential allelic imbalance between F1_414 and F1_415. Classifies them according to which parent they are biased toward.  
+**Part 2: Regulatory Effect** Looks at all genes with exonic SNVs. Classifies based on being regulated by cis, trans, both, or neither. Counts were normalized with DESeq2 size factors.  
+*cis* test: binomial exact test on F1_414_Ae and F1_414_Ol counts, centered on the global reference bias.  
+*trans* test: fisher's exact test on (parent) Ae and Ol counts compared to (F1) Ae and Ol counts.  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 
+```{r}
+load("phasedData.Rdata")
+load("Results_Beta/significantb.Rdata")
+
+MBASED_results <- significantb$geneOutput %>% 
+                  mutate(GeneID = rownames(significantb$geneOutput)) %>%
+                  select(GeneID, MAFD = majorAlleleFrequencyDifference, p = pValueASE)
+
+parentOfOrigin <- phasedData %>% 
+                  dplyr::select(GeneID, F1_414_RO, F1_414_AO, F1_415_RO, F1_415_AO) %>%
+                  group_by(GeneID) %>% 
+                  summarise_at(vars(F1_414_RO:F1_415_AO), sum)
+
+parentOfOrigin %<>% filter(GeneID %in% MBASED_results$GeneID) %>%
+                    left_join(MBASED_results) %>%
+                    mutate(F1_414_mat = signif(F1_414_RO / (F1_414_RO + F1_414_AO), 3),
+                           F1_414_pat = signif(F1_414_AO / (F1_414_RO + F1_414_AO), 3), 
+                           F1_415_mat = signif(F1_415_AO / (F1_415_RO + F1_415_AO), 3), 
+                           F1_415_pat = signif(F1_415_RO / (F1_415_RO + F1_415_AO), 3))
+
+parentOfOrigin %<>% mutate(mat = F1_414_mat + F1_415_mat,
+                          pat = F1_414_pat + F1_415_pat) %>% 
+                    mutate(Parent = ifelse(mat > pat, "Maternal", "Paternal"))
+head(parentOfOrigin)
+
+imprintedGenesF1 <- parentOfOrigin
+save(imprintedGenesF1, file = "imprintedGenesF1.Rdata")
+```
+
+### Cis vs trans regulatory effect
+Using only F1_414
+```{r}
+bt <- function(a, b, p = 0.5) {binom.test(a, a + b, p)$p.value}
+ft <- function(a, b, c, d) {
+  df <- data.frame(Parent = c(a, b), F1 = c(c, d))
+  fisher.test(df)$p.value
+}
+
+AddEffectSize <- function(regulatoryData) {
+  regulatoryData %<>%
+      mutate(parentAI = log2(Ae / Ol), 
+             F1AI = log2(F1_Ae / F1_Ol), 
+             diff = parentAI - F1AI)
+  return(regulatoryData)
+}
+
+NormalizeBySizeFactor <- function(regulatoryData) {
+  sizeFactors <- DESeq2::estimateSizeFactorsForMatrix(regulatory[2:5])
+  regulatoryData %<>%
+    mutate(Ae = Ae / sizeFactors['Ae'], Ol = Ol / sizeFactors['Ol'],
+           F1_Ae = F1_Ae / sizeFactors['F1_Ae'], F1_Ol = F1_Ol / sizeFactors['F1_Ol']) %>%
+    mutate_at(vars(2:5), round)
+  return(regulatoryData)
+}
+
+ClassifyRegulatoryEffect <- function(regulatory, p = 0.05) {
+  regulatory$effect <- mapply(ClassifyRegulatoryEffectHelper, regulatory$pCis, regulatory$pTrans)
+  return(regulatory)
+}
+
+ClassifyRegulatoryEffectHelper <- function(pCis, pTrans, p = 0.05) {
+  if(pCis < p & pTrans < p) {
+    return("cis and trans")
+  } else if (pCis < p) {
+    return("cis")
+  } else if (pTrans < p) {
+    return("trans")
+  } else {
+    return("conserved")
+  }
+}
+
+FindRegulatoryEffect <- function(phasedData, groupByGene = TRUE, effectSize = FALSE) {
+  regulatory <- phasedData %>% select(GeneID, Ae_RO, Ae_AO, Ol_RO, Ol_AO, F1_414_RO, F1_414_AO, F1_414_refBias)
+  if(groupByGene == TRUE) {
+    sums <- regulatory %>% group_by(GeneID) %>%
+      summarise_at(vars(Ae_RO:F1_414_AO), sum)
+    refBias <- regulatory %>% group_by(GeneID) %>%
+      summarise(F1_414_refBias = mean(F1_414_refBias))
+    regulatory <- full_join(sums, refBias)
+  }
+
+  regulatory %<>% transform(Ae = Ae_RO + Ae_AO, Ol = Ol_RO + Ol_AO) %>%
+                  select(GeneID, Ae, Ol, F1_Ae = F1_414_RO, F1_Ol = F1_414_AO, refBias = F1_414_refBias) 
+  
+  regulatory %<>% NormalizeBySizeFactor()
+  
+  if(effectSize == TRUE) {
+    regulatory <- AddEffectSize(regulatory)
+  }
+  
+  regulatory$pCis <- mapply(bt, regulatory$F1_Ae, regulatory$F1_Ol, regulatory$refBias)
+  regulatory$pTrans <- mapply(ft, regulatory$Ae, regulatory$Ol, regulatory$F1_Ae, regulatory$F1_Ol)
+  
+  regulatory$pCis <- p.adjust(regulatory$pCis, method = "bonferroni")
+  regulatory$pTrans <- p.adjust(regulatory$pTrans, method = "bonferroni")
+  
+  return(regulatory)
+}
+
+genewise <- FindRegulatoryEffect(phasedData)
+
+regulatoryEffectsF1 <- genewise %>% select(-refBias) %>%
+  ClassifyRegulatoryEffect(p = 0.05)
+
+save(regulatoryEffectsF1, file = "regulatoryEffectsF1.Rdata")
+```
