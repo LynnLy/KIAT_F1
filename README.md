@@ -1,10 +1,6 @@
-## Looking at reciprocal F1s in our KIAT project  
-### Also, "aseQTL" on the F2s
+## Reciprocal F1 Observations
 
-To do: 
-generalize the kallisto-sleuth workflow using `Snakemake` 
-QTL using ASE as the trait of interest ('aseQTL')  
-examine technical variance in DE genes called by edgeR but not sleuth (done but not reported yet)
+Script explanations below: 
 
 ## F1
 ### MBASED : Allele Specific Expression 
@@ -30,3 +26,6 @@ The former assumes a binomial distribution of read counts and the latter assumes
 
 ### aseQTL : QTL using allele specific expression as the phenotype
 **aseQTL_subset.rmd** uses 100 randomly sampled SNVs to do 1000 permutations on, for calculating LOD thresholds.  
+
+To do: 
+examine technical variance in DE genes called by edgeR but not sleuth (done but not reported yet)
